@@ -1,0 +1,65 @@
+package deps
+
+import (
+	"context"
+{{- if .Buckets }}
+	"fmt"
+{{- end }}
+
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/devctllabs/go-libs/di"
+	awsconfig "github.com/aws/aws-sdk-go-v2/config"
+{{- $static := false }}
+{{- range .Connections }}{{ if eq .Credentials "static" }}{{ $static = true }}{{ end }}{{ end }}
+{{- if $static }}
+	"github.com/aws/aws-sdk-go-v2/credentials"
+{{- end }}
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+)
+
+{{- if .Buckets }}
+// S3Bucket binds one configured bucket name to its connection.
+type S3Bucket struct {
+	Client *s3.Client
+	Name string
+}
+{{- end }}
+
+{{- range .Connections }}
+const s3{{ goName .Name }}Key = "s3-connection:{{ .Name }}"
+
+func provideS3{{ goName .Name }}(ctx context.Context, graph *di.Container, cfg *Config) error {
+	return di.ProvideNamedResource(graph, s3{{ goName .Name }}Key, func(di.Resolver) (*s3.Client, error) {
+		loadOptions := []func(*awsconfig.LoadOptions) error{
+			awsconfig.WithRegion(cfg.S3.{{ if and .Name (ne .Name "default") }}{{ goName .Name }}{{ end }}Region),
+		}
+{{- if eq .Credentials "static" }}
+		loadOptions = append(loadOptions, awsconfig.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(
+			cfg.S3.{{ if and .Name (ne .Name "default") }}{{ goName .Name }}{{ end }}AccessKeyID,
+			cfg.S3.{{ if and .Name (ne .Name "default") }}{{ goName .Name }}{{ end }}SecretAccessKey,
+			"",
+		)))
+{{- end }}
+		awsCfg, err := awsconfig.LoadDefaultConfig(ctx, loadOptions...)
+		if err != nil { return nil, err }
+		return s3.NewFromConfig(awsCfg, func(options *s3.Options) {
+			if endpoint := cfg.S3.{{ if and .Name (ne .Name "default") }}{{ goName .Name }}{{ end }}Endpoint; endpoint != "" {
+				options.BaseEndpoint = aws.String(endpoint)
+			}
+			options.UsePathStyle = cfg.S3.{{ if and .Name (ne .Name "default") }}{{ goName .Name }}{{ end }}ForcePathStyle
+		}), nil
+	}, func(context.Context, *s3.Client) error { return nil })
+}
+{{- end }}
+
+{{- range .Buckets }}
+const s3{{ goName .Name }}BucketKey = "s3-bucket:{{ .Name }}"
+
+func provideS3{{ goName .Name }}Bucket(_ context.Context, graph *di.Container, cfg *Config) error {
+	return di.ProvideNamed[S3Bucket](graph, s3{{ goName .Name }}BucketKey, func(resolver di.Resolver) (S3Bucket, error) {
+		client, err := di.ResolveNamed[*s3.Client](resolver, s3{{ goName .Connection }}Key)
+		if err != nil { return S3Bucket{}, fmt.Errorf("resolve S3 connection {{ .Connection }}: %w", err) }
+		return S3Bucket{Client: client, Name: cfg.S3.{{ goName .Name }}Bucket}, nil
+	})
+}
+{{- end }}

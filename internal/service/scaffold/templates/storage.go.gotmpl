@@ -1,0 +1,133 @@
+package deps
+
+import (
+	"context"
+	"errors"
+	"fmt"
+
+	"github.com/devctllabs/go-libs/di"
+{{- if not .ClickHouse }}
+	"github.com/devctllabs/go-libs/txmanager"
+{{- end }}
+{{- if and .Telemetry (not .ClickHouse) }}
+	telemetrylib "github.com/devctllabs/go-libs/telemetry"
+{{- end }}
+{{- if .ClickHouse }}
+	"github.com/ClickHouse/clickhouse-go/v2"
+	clickhousedriver "github.com/ClickHouse/clickhouse-go/v2/lib/driver"
+{{- end }}
+{{- range .Kinds }}
+	{{ .Name }}db "github.com/devctllabs/go-libs/{{ .Name }}db"
+{{- end }}
+)
+
+const storage{{ .Name }}ConnectionName = "db-connection:{{ .Connection }}"
+
+{{- if .ClickHouse }}
+type clickHouse{{ .Name }}Checker struct { connection clickhousedriver.Conn }
+
+func (c clickHouse{{ .Name }}Checker) Check(ctx context.Context) error { return c.connection.Ping(ctx) }
+
+func provideStorage{{ .Name }}(ctx context.Context, graph *di.Container, cfg *Config) error {
+	if err := di.ProvideNamedResource[clickhousedriver.Conn](graph, storage{{ .Name }}ConnectionName, func(di.Resolver) (clickhousedriver.Conn, error) {
+		options, err := clickhouse.ParseDSN(cfg.DB{{ .Name }}.{{ .ClickHouseConfig }})
+		if err != nil { return nil, fmt.Errorf("clickhouse.ParseDSN: %w", err) }
+		connection, err := clickhouse.Open(options)
+		if err != nil { return nil, fmt.Errorf("clickhouse.Open: %w", err) }
+		if err := connection.Ping(ctx); err != nil {
+			return nil, errors.Join(fmt.Errorf("connection.Ping: %w", err), connection.Close())
+		}
+		return connection, nil
+	}, func(_ context.Context, connection clickhousedriver.Conn) error { return connection.Close() }); err != nil {
+		return fmt.Errorf("di.ProvideNamedResource: %w", err)
+	}
+	return di.ProvideNamed[dbChecker](graph, storage{{ .Name }}ConnectionName, func(resolver di.Resolver) (dbChecker, error) {
+		connection, err := di.ResolveNamed[clickhousedriver.Conn](resolver, storage{{ .Name }}ConnectionName)
+		if err != nil { return nil, fmt.Errorf("di.ResolveNamed: %w", err) }
+		return clickHouse{{ .Name }}Checker{connection: connection}, nil
+	})
+}
+{{- else }}
+type storage{{ .Name }} struct {
+{{- range .Kinds }}
+	{{ .Field }} *{{ .Name }}db.DB
+{{- end }}
+}
+
+func provideStorage{{ .Name }}(ctx context.Context, graph *di.Container, cfg *Config) error {
+	if err := di.ProvideNamedResource[*storage{{ .Name }}](graph, storage{{ .Name }}ConnectionName, func(resolver di.Resolver) (*storage{{ .Name }}, error) {
+		return openStorage{{ .Name }}(ctx, resolver, cfg)
+	}, func(_ context.Context, value *storage{{ .Name }}) error { return value.close() }); err != nil {
+		return fmt.Errorf("di.ProvideNamedResource: %w", err)
+	}
+{{- range .Kinds }}
+	if err := di.ProvideNamed[*{{ .Name }}db.Endpoint](graph, storage{{ $.Name }}ConnectionName+".reader", func(resolver di.Resolver) (*{{ .Name }}db.Endpoint, error) {
+		storage, err := di.ResolveNamed[*storage{{ $.Name }}](resolver, storage{{ $.Name }}ConnectionName)
+		if err != nil { return nil, fmt.Errorf("di.ResolveNamed: %w", err) }
+		if storage.{{ .Field }} == nil { return nil, fmt.Errorf("storage {{ $.Connection }} does not use {{ .Name }}") }
+		return storage.{{ .Field }}.Reader(), nil
+	}); err != nil { return fmt.Errorf("di.ProvideNamed reader: %w", err) }
+	if err := di.ProvideNamed[*{{ .Name }}db.Endpoint](graph, storage{{ $.Name }}ConnectionName+".writer", func(resolver di.Resolver) (*{{ .Name }}db.Endpoint, error) {
+		storage, err := di.ResolveNamed[*storage{{ $.Name }}](resolver, storage{{ $.Name }}ConnectionName)
+		if err != nil { return nil, fmt.Errorf("di.ResolveNamed: %w", err) }
+		if storage.{{ .Field }} == nil { return nil, fmt.Errorf("storage {{ $.Connection }} does not use {{ .Name }}") }
+		return storage.{{ .Field }}.Writer(), nil
+	}); err != nil { return fmt.Errorf("di.ProvideNamed writer: %w", err) }
+{{- end }}
+	if err := di.ProvideNamed[txmanager.Managers](graph, storage{{ .Name }}ConnectionName, func(resolver di.Resolver) (txmanager.Managers, error) {
+		storage, err := di.ResolveNamed[*storage{{ .Name }}](resolver, storage{{ .Name }}ConnectionName)
+		if err != nil { return nil, fmt.Errorf("di.ResolveNamed: %w", err) }
+		return storage.managers(), nil
+	}); err != nil { return fmt.Errorf("di.ProvideNamed tx managers: %w", err) }
+	return di.ProvideNamed[dbChecker](graph, storage{{ .Name }}ConnectionName, func(resolver di.Resolver) (dbChecker, error) {
+		storage, err := di.ResolveNamed[*storage{{ .Name }}](resolver, storage{{ .Name }}ConnectionName)
+		if err != nil { return nil, fmt.Errorf("di.ResolveNamed: %w", err) }
+		return storage.checker(), nil
+	})
+}
+
+func openStorage{{ .Name }}(ctx context.Context, resolver di.Resolver, cfg *Config) (*storage{{ .Name }}, error) {
+{{- if .Telemetry }}
+	telemetryRuntime, err := di.Resolve[*telemetrylib.Runtime](resolver)
+	if err != nil { return nil, fmt.Errorf("di.Resolve: %w", err) }
+{{- end }}
+	switch cfg.DB{{ .Name }}.Kind {
+{{- range .Variants }}
+	case {{ printf "%q" .Name }}:
+{{- if .SQLite }}
+		db, err := {{ .Kind }}db.Open(ctx, {{ .Kind }}db.Config{DSN: cfg.DB{{ $.Name }}.{{ .ConfigField }}{{ if $.Telemetry }}, Telemetry: {{ .Kind }}db.Telemetry{TracerProvider: telemetryRuntime.TracerProvider(), MeterProvider: telemetryRuntime.MeterProvider()}{{ end }}})
+{{- else }}
+		db, err := {{ .Kind }}db.Open(ctx, {{ .Kind }}db.Config{Writer: {{ .Kind }}db.EndpointConfig{DSN: cfg.DB{{ $.Name }}.{{ .ConfigField }}}{{ if $.Telemetry }}, Telemetry: {{ .Kind }}db.Telemetry{TracerProvider: telemetryRuntime.TracerProvider(), MeterProvider: telemetryRuntime.MeterProvider()}{{ end }}})
+{{- end }}
+		if err != nil { return nil, fmt.Errorf("{{ .Kind }}db.Open: %w", err) }
+		return &storage{{ $.Name }}{ {{- .Field }}: db}, nil
+{{- end }}
+	default:
+		return nil, fmt.Errorf("unsupported {{ .Connection }} database kind %q", cfg.DB{{ .Name }}.Kind)
+	}
+}
+
+func (s *storage{{ .Name }}) managers() txmanager.Managers {
+{{- range .Kinds }}
+	if s.{{ .Field }} != nil { return s.{{ .Field }}.TxManagers() }
+{{- end }}
+	return nil
+}
+
+func (s *storage{{ .Name }}) checker() dbChecker {
+{{- range .Kinds }}
+	if s.{{ .Field }} != nil { return s.{{ .Field }}.Writer() }
+{{- end }}
+	return nil
+}
+
+func (s *storage{{ .Name }}) close() error {
+	var closeErrors []error
+{{- range .Kinds }}
+	if s.{{ .Field }} != nil {
+		if err := s.{{ .Field }}.Close(); err != nil { closeErrors = append(closeErrors, fmt.Errorf("close {{ .Name }}: %w", err)) }
+	}
+{{- end }}
+	return errors.Join(closeErrors...)
+}
+{{- end }}

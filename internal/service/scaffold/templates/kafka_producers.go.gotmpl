@@ -1,0 +1,19 @@
+package deps
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/devctllabs/go-libs/di"
+	kafka "github.com/devctllabs/go-libs/kafka"
+)
+
+{{- range . }}
+func provide{{ goName .Name }}KafkaProducer(_ context.Context, graph *di.Container, cfg *Config) error {
+	return di.ProvideNamedResource(graph, kafkaProducerKey({{ printf "%q" .Name }}), func(di.Resolver) (*kafka.Producer[[]byte], error) {
+		producer, err := kafka.NewProducer(kafka.ProducerConfig{Brokers: cfg.Kafka.Brokers}, kafka.NewBytesEncoder())
+		if err != nil { return nil, fmt.Errorf("kafka.NewProducer: %w", err) }
+		return producer, nil
+	}, func(ctx context.Context, producer *kafka.Producer[[]byte]) error { return producer.Close(ctx) })
+}
+{{- end }}

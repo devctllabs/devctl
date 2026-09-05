@@ -1,0 +1,4 @@
+package: clienthttp
+generate:
+  models: true
+  client: true

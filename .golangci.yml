@@ -1,0 +1,79 @@
+version: "2"
+
+run:
+  relative-path-mode: gomod
+  tests: true
+  modules-download-mode: readonly
+
+linters:
+  default: none
+  enable:
+    - asasalint
+    - bidichk
+    - bodyclose
+    - containedctx
+    - contextcheck
+    - durationcheck
+    - errcheck
+    - errchkjson
+    - errname
+    - errorlint
+    - exhaustive
+    - fatcontext
+    - forcetypeassert
+    - gocheckcompilerdirectives
+    - gochecknoinits
+    - gocognit
+    - govet
+    - inamedparam
+    - ineffassign
+    - loggercheck
+    - makezero
+    - musttag
+    - nilerr
+    - nilnesserr
+    - noctx
+    - nolintlint
+    - nosprintfhostport
+    - paralleltest
+    - predeclared
+    - reassign
+    - recvcheck
+    - revive
+    - rowserrcheck
+    - sqlclosecheck
+    - staticcheck
+    - testifylint
+    - thelper
+    - tparallel
+    - unconvert
+    - unused
+    - usetesting
+    - wastedassign
+    - wrapcheck
+  settings:
+    gocognit:
+      min-complexity: 20
+    nolintlint:
+      allow-unused: false
+      require-explanation: true
+      require-specific: true
+    paralleltest:
+      ignore-missing: false
+      ignore-missing-subtests: false
+      check-cleanup: true
+    revive:
+      rules:
+        - name: argument-limit
+          arguments: [4]
+        - name: function-result-limit
+          arguments: [3]
+    wrapcheck:
+      ignore-sig-regexps:
+        # ReportError already returns a delivery-owned terminal error. Wrapping it
+        # would make the error visible to urfave/cli and duplicate the log event.
+        - 'ErrorReporter\)\.ReportError\('
+
+formatters:
+  enable:
+    - gofmt

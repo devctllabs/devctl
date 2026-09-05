@@ -1,0 +1,57 @@
+[tools]
+go = "1.26.0"
+golangci-lint = "2.12.2"
+{{- if .JSON }}
+node = "24"
+"npm:quicktype" = "26.0.0"
+{{- end }}
+{{- if .Migrations }}
+"go:github.com/golang-migrate/migrate/v4/cmd/migrate" = { version = "v4.19.1", tags = [{{- range $index, $tag := .MigrationTags }}{{ if $index }}, {{ end }}{{ printf "%q" $tag }}{{- end }}] }
+{{- end }}
+
+[tasks.fmt]
+run = "golangci-lint fmt"
+[tasks."fmt:check"]
+run = "golangci-lint fmt --diff"
+[tasks."lint:contracts"]
+run = "devctl lint"
+[tasks."lint:go"]
+run = "golangci-lint run"
+[tasks.lint]
+depends = ["lint:contracts", "lint:go"]
+[tasks.test]
+run = "go test ./..."
+[tasks.gen]
+run = "devctl gen"
+[tasks."gen:http"]
+run = "devctl gen http"
+[tasks."gen:grpc"]
+run = "devctl gen grpc"
+[tasks."gen:kafka"]
+run = "devctl gen kafka"
+[tasks.check]
+depends = ["fmt:check", "lint", "test"]
+{{ range .Migrations }}
+[tasks."{{ .TaskPrefix }}:create"]
+description = "Create timestamped migration files in {{ .Path }}"
+usage = 'arg "<name>" help="Migration name"'
+run = '''
+migrate create -ext sql -dir "{{ .Path }}" -format "20060102150405" "${usage_name?}"
+'''
+
+[tasks."{{ .TaskPrefix }}:up"]
+description = "Apply migrations from {{ .Path }}"
+run = '''
+database_url="{{ .DatabaseExpression }}"
+migrate -path "{{ .Path }}" -database "$database_url" up
+'''
+
+[tasks."{{ .TaskPrefix }}:down"]
+description = "Roll back migrations from {{ .Path }}"
+usage = 'arg "[steps]" default="1" help="Number of migrations"'
+confirm = "Roll back {{ .TaskPrefix }} migrations?"
+run = '''
+database_url="{{ .DatabaseExpression }}"
+migrate -path "{{ .Path }}" -database "$database_url" down "${usage_steps?}"
+'''
+{{ end }}

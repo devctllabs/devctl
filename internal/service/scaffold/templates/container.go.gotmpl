@@ -1,0 +1,144 @@
+package deps
+
+{{- if or .Database .Logging .Telemetry .Server .Kafka }}
+import (
+	"context"
+{{- if or .Server .Kafka }}
+	"errors"
+	"fmt"
+	"time"
+{{- else if or .Logging .Telemetry }}
+	"fmt"
+{{- end }}
+
+{{- if or .Logging .Telemetry .Server .Kafka }}
+	"github.com/devctllabs/go-libs/di"
+{{- end }}
+{{- if or .Server .Kafka }}
+	"github.com/devctllabs/go-libs/lifecycle"
+{{- end }}
+{{- if .Logging }}
+	loglib "github.com/devctllabs/go-libs/log"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+{{- end }}
+{{- if .Telemetry }}
+	telemetrylib "github.com/devctllabs/go-libs/telemetry"
+{{- end }}
+)
+{{- end }}
+
+{{- if .Database }}
+type dbChecker interface { Check(context.Context) error }
+{{- end }}
+
+{{- if or .Server .Kafka }}
+type scenarioRunner interface { Run(context.Context) error }
+
+// Scenario owns one lazily resolved runnable branch and its dependency graph.
+type Scenario struct {
+	graph *di.Container
+	tasks []lifecycle.Task
+}
+
+// Run coordinates the selected branch until cancellation or failure.
+func (s *Scenario) Run(ctx context.Context) error {
+	return lifecycle.Run(ctx, lifecycle.Config{
+		ShutdownTimeout: 30 * time.Second,
+		Shutdown: s.Shutdown,
+		Tasks: s.tasks,
+	})
+}
+
+// Shutdown closes only resources constructed by this Scenario.
+func (s *Scenario) Shutdown(ctx context.Context) error {
+	if s == nil || s.graph == nil { return nil }
+	if err := s.graph.Shutdown(ctx); err != nil { return fmt.Errorf("graph.Shutdown: %w", err) }
+	return nil
+}
+
+func newScenarioGraph(ctx context.Context) (*di.Container, *Config, error) {
+	cfg, err := loadConfig(ctx)
+	if err != nil { return nil, nil, fmt.Errorf("loadConfig: %w", err) }
+	graph := di.New()
+	if err := di.ProvideValue(graph, cfg); err != nil { return nil, nil, fmt.Errorf("di.ProvideValue: %w", err) }
+	if err := provideApplication(ctx, graph, cfg); err != nil {
+		shutdownErr := graph.Shutdown(context.WithoutCancel(ctx))
+		return nil, nil, errors.Join(fmt.Errorf("provideApplication: %w", err), shutdownErr)
+	}
+	return graph, cfg, nil
+}
+{{- end }}
+
+{{- if .Logging }}
+func provideLogging(_ context.Context, graph *di.Container, cfg *Config) error {
+	return di.ProvideResource(graph, func(di.Resolver) (*zap.Logger, error) {
+		level := zapcore.InfoLevel
+		if err := level.Set(cfg.Logging.Level); err != nil { return nil, fmt.Errorf("logging level: %w", err) }
+		return loglib.New(level, false).Named({{ printf "%q" .Project }}), nil
+	}, func(_ context.Context, value *zap.Logger) error { _ = value.Sync(); return nil })
+}
+{{- end }}
+
+{{- if .Telemetry }}
+func provideTelemetry(ctx context.Context, graph *di.Container, cfg *Config) error {
+	return di.ProvideResource(graph, func(di.Resolver) (*telemetrylib.Runtime, error) {
+		value, err := telemetrylib.Open(ctx, telemetrylib.Config{
+			Enabled: {{ if .TelemetryToggle }}cfg.Telemetry.Enabled{{ else }}true{{ end }},
+			ServiceName: {{ printf "%q" .Project }},
+			ServiceVersion: cfg.Telemetry.ServiceVersion,
+			DeploymentEnvironment: cfg.Telemetry.DeploymentEnvironment,
+		})
+		if err != nil { return nil, fmt.Errorf("telemetrylib.Open: %w", err) }
+		return value, nil
+	}, func(ctx context.Context, value *telemetrylib.Runtime) error { return value.Shutdown(ctx) })
+}
+{{- end }}
+
+{{- if .Server }}
+// NewAPI resolves only the API Runtime branch.
+func NewAPI(ctx context.Context) (*Scenario, error) {
+	graph, _, err := newScenarioGraph(ctx)
+	if err != nil { return nil, err }
+	runtime, err := di.Resolve[*Runtime](graph)
+	if err != nil {
+		return nil, errors.Join(fmt.Errorf("di.Resolve Runtime: %w", err), graph.Shutdown(context.WithoutCancel(ctx)))
+	}
+	return &Scenario{graph: graph, tasks: runtime.Tasks()}, nil
+}
+{{- end }}
+
+{{- if .Kafka }}
+// ConsumerSelectionError reports an unknown or disabled selected consumer.
+type ConsumerSelectionError struct { Name string; Reason string }
+
+func (e *ConsumerSelectionError) Error() string {
+	return fmt.Sprintf("Kafka consumer %q is %s", e.Name, e.Reason)
+}
+
+// NewConsumer validates selection before resolving the selected consumer branch.
+func NewConsumer(ctx context.Context, name string) (*Scenario, error) {
+	cfg, err := loadConfig(ctx)
+	if err != nil { return nil, fmt.Errorf("loadConfig: %w", err) }
+	switch name {
+{{- range .Consumers }}
+	case {{ printf "%q" .Name }}:
+		if !({{ .Enabled }}) { return nil, &ConsumerSelectionError{Name: name, Reason: "disabled"} }
+{{- end }}
+	default:
+		return nil, &ConsumerSelectionError{Name: name, Reason: "unknown"}
+	}
+	graph := di.New()
+	if err := di.ProvideValue(graph, cfg); err != nil { return nil, fmt.Errorf("di.ProvideValue: %w", err) }
+	if err := provideApplication(ctx, graph, cfg); err != nil {
+		return nil, errors.Join(fmt.Errorf("provideApplication: %w", err), graph.Shutdown(context.WithoutCancel(ctx)))
+	}
+	runner, err := di.ResolveNamed[scenarioRunner](graph, kafkaConsumerKey(name))
+	if err != nil {
+		return nil, errors.Join(fmt.Errorf("di.ResolveNamed consumer: %w", err), graph.Shutdown(context.WithoutCancel(ctx)))
+	}
+	return &Scenario{graph: graph, tasks: []lifecycle.Task{
+		{Name: "kafka-consumer:" + name, Run: runner.Run},
+	}}, nil
+}
+{{- end }}

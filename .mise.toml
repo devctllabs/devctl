@@ -1,0 +1,42 @@
+[tools]
+go = "1.26.0"
+golangci-lint = "2.12.2"
+node = "24"
+"npm:quicktype" = "26.0.0"
+
+[tasks.fmt]
+run = "golangci-lint fmt"
+
+[tasks."fmt:check"]
+run = "golangci-lint fmt --diff"
+
+[tasks.lint]
+run = "golangci-lint run"
+
+[tasks.test]
+run = "GOWORK=off go test ./..."
+
+[tasks."test:race"]
+run = "GOWORK=off go test -race ./..."
+
+[tasks.build]
+run = "GOWORK=off go build -trimpath -o \"${TMPDIR:-/tmp}/devctl-check\" ./cmd/devctl"
+
+[tasks."mod:check"]
+run = "GOWORK=off go mod tidy -diff"
+
+[tasks.e2e]
+run = "GOWORK=off go test -tags=e2e ./e2e -v"
+
+[tasks.check]
+depends = ["fmt:check", "lint", "test:race", "build", "mod:check", "docs:check", "example:orders:check", "e2e"]
+
+[tasks."docs:generate"]
+run = "GOWORK=off go run ./cmd/devctl/internal/docgen"
+
+[tasks."docs:check"]
+run = "GOWORK=off go run ./cmd/devctl/internal/docgen --check"
+
+[tasks."example:orders:check"]
+dir = "examples/orders-api"
+run = "GOWORK=off go test ./..."

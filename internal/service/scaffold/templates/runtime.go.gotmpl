@@ -1,0 +1,243 @@
+package deps
+
+import (
+	"context"
+	"errors"
+	"fmt"
+
+	"github.com/devctllabs/go-libs/di"
+	"github.com/devctllabs/go-libs/lifecycle"
+{{- if .HTTP }}
+	"net/http"
+	"time"
+	"github.com/labstack/echo/v5"
+{{- end }}
+{{- if .GRPC }}
+	"net"
+	"google.golang.org/grpc"
+{{- end }}
+{{- if .Health }}
+	healthlib "github.com/devctllabs/go-libs/health"
+	healthserverlib "github.com/devctllabs/go-libs/healthserver"
+{{- end }}
+{{- if .Pprof }}
+	debugserverlib "github.com/devctllabs/go-libs/debugserver"
+{{- end }}
+)
+
+{{- if .HTTP }}
+// HTTPRegistrar is implemented by user-owned application composition.
+type HTTPRegistrar interface { RegisterHTTP(*echo.Echo) }
+{{- end }}
+{{- if .GRPC }}
+// GRPCRegistrar is implemented by user-owned application composition.
+type GRPCRegistrar interface { RegisterGRPC(*grpc.Server) }
+{{- end }}
+
+// Runtime owns the optional long-lived components selected by configuration.
+type Runtime struct {
+{{- if .HTTP }}
+	http *http.Server
+{{- if .HTTPToggle }}
+	httpEnabled bool
+{{- end }}
+{{- end }}
+{{- if .GRPC }}
+	grpc        *grpc.Server
+	grpcAddress string
+{{- if .GRPCToggle }}
+	grpcEnabled bool
+{{- end }}
+{{- end }}
+{{- if .Health }}
+	health *healthserverlib.Server
+{{- if .HealthToggle }}
+	healthEnabled bool
+{{- end }}
+{{- end }}
+{{- if .Pprof }}
+	pprof *debugserverlib.Server
+{{- if .PprofToggle }}
+	pprofEnabled bool
+{{- end }}
+{{- end }}
+}
+
+func newRuntime(resolver di.Resolver, cfg *Config) (*Runtime, error) {
+{{- if .HTTP }}
+	httpRegistrar, err := di.Resolve[HTTPRegistrar](resolver)
+	if err != nil { return nil, fmt.Errorf("di.Resolve HTTPRegistrar: %w", err) }
+{{- end }}
+{{- if .GRPC }}
+	grpcRegistrar, err := di.Resolve[GRPCRegistrar](resolver)
+	if err != nil { return nil, fmt.Errorf("di.Resolve GRPCRegistrar: %w", err) }
+{{- end }}
+{{- if .HealthConnections }}
+	options := make([]healthlib.Option, 0, {{ len .HealthConnections }})
+{{- range .HealthConnections }}
+	{
+		checker, err := di.ResolveNamed[dbChecker](resolver, {{ printf "%q" .Connection }})
+		if err != nil {
+			return nil, fmt.Errorf("di.ResolveNamed: %w", err)
+		}
+		options = append(options, healthlib.NonCritical({{ printf "%q" .Probe }}, checker))
+	}
+{{- end }}
+{{- end }}
+	return NewRuntime(cfg{{ if .HTTP }}, httpRegistrar{{ end }}{{ if .GRPC }}, grpcRegistrar{{ end }}{{ if .HealthConnections }}, options...{{ end }})
+}
+
+func NewRuntime(cfg *Config{{ if .HTTP }}, httpRegistrar HTTPRegistrar{{ end }}{{ if .GRPC }}, grpcRegistrar GRPCRegistrar{{ end }}{{ if .HealthConnections }}, options ...healthlib.Option{{ end }}) (*Runtime, error) {
+	if cfg == nil {
+		return nil, errors.New("config is nil")
+	}
+	runtime := &Runtime{}
+{{- if .HTTP }}
+	httpRouter := echo.New()
+	httpRegistrar.RegisterHTTP(httpRouter)
+	runtime.http = &http.Server{Addr: cfg.HTTP.Address, Handler: httpRouter, ReadHeaderTimeout: 2 * time.Second, IdleTimeout: 30 * time.Second}
+{{- if .HTTPToggle }}
+	runtime.httpEnabled = cfg.HTTP.Enabled
+{{- end }}
+{{- end }}
+{{- if .GRPC }}
+	runtime.grpc = newGRPCServer()
+	grpcRegistrar.RegisterGRPC(runtime.grpc)
+	runtime.grpcAddress = cfg.GRPC.Address
+{{- if .GRPCToggle }}
+	runtime.grpcEnabled = cfg.GRPC.Enabled
+{{- end }}
+{{- end }}
+{{- if .Health }}
+	probes, err := healthlib.New({{ if .HealthConnections }}options...{{ end }})
+	if err != nil {
+		return nil, fmt.Errorf("healthlib.New: %w", err)
+	}
+	runtime.health, err = healthserverlib.NewServer(probes, healthserverlib.WithAddress(cfg.Health.Address))
+	if err != nil {
+		return nil, fmt.Errorf("healthserverlib.NewServer: %w", err)
+	}
+{{- if .HealthToggle }}
+	runtime.healthEnabled = cfg.Health.Enabled
+{{- end }}
+{{- end }}
+{{- if .Pprof }}
+	pprofServer, err := debugserverlib.NewServer(debugserverlib.WithAddress(cfg.Pprof.Address))
+	if err != nil {
+		return nil, fmt.Errorf("debugserverlib.NewServer: %w", err)
+	}
+	runtime.pprof = pprofServer
+{{- if .PprofToggle }}
+	runtime.pprofEnabled = cfg.Pprof.Enabled
+{{- end }}
+{{- end }}
+	return runtime, nil
+}
+
+func provideRuntime(_ context.Context, graph *di.Container, cfg *Config) error {
+	return di.ProvideResource(graph, func(resolver di.Resolver) (*Runtime, error) {
+		return newRuntime(resolver, cfg)
+	}, func(ctx context.Context, value *Runtime) error { return value.Shutdown(ctx) })
+}
+
+// Tasks returns enabled runtime roots in deterministic startup order.
+func (r *Runtime) Tasks() []lifecycle.Task {
+	tasks := make([]lifecycle.Task, 0, 3)
+{{- if .HTTP }}
+{{- if .HTTPToggle }}
+	if r.httpEnabled {
+{{- end }}
+		tasks = append(tasks, lifecycle.Task{Name: "http", Run: func(context.Context) error {
+			if err := r.http.ListenAndServe(); err != nil {
+				return fmt.Errorf("r.http.ListenAndServe: %w", err)
+			}
+			return nil
+		}})
+{{- if .HTTPToggle }}
+	}
+{{- end }}
+{{- end }}
+{{- if .GRPC }}
+{{- if .GRPCToggle }}
+	if r.grpcEnabled {
+{{- end }}
+		tasks = append(tasks, lifecycle.Task{Name: "grpc", Run: func(context.Context) error {
+			listener, err := net.Listen("tcp", r.grpcAddress)
+			if err != nil { return fmt.Errorf("net.Listen: %w", err) }
+			if err := r.grpc.Serve(listener); err != nil { return fmt.Errorf("r.grpc.Serve: %w", err) }
+			return nil
+		}})
+{{- if .GRPCToggle }}
+	}
+{{- end }}
+{{- end }}
+{{- if .Health }}
+{{- if .HealthToggle }}
+	if r.healthEnabled {
+{{- end }}
+		tasks = append(tasks, lifecycle.Task{Name: "health", Run: func(context.Context) error {
+			if err := r.health.ListenAndServe(); err != nil {
+				return fmt.Errorf("r.health.ListenAndServe: %w", err)
+			}
+			return nil
+		}})
+{{- if .HealthToggle }}
+	}
+{{- end }}
+{{- end }}
+{{- if .Pprof }}
+{{- if .PprofToggle }}
+	if r.pprofEnabled {
+{{- end }}
+		tasks = append(tasks, lifecycle.Task{Name: "pprof", Run: func(context.Context) error {
+			if err := r.pprof.ListenAndServe(); err != nil {
+				return fmt.Errorf("r.pprof.ListenAndServe: %w", err)
+			}
+			return nil
+		}})
+{{- if .PprofToggle }}
+	}
+{{- end }}
+{{- end }}
+	return tasks
+}
+
+// Shutdown stops every constructed runtime component and joins cleanup failures.
+func (r *Runtime) Shutdown(ctx context.Context) error {
+	var shutdownErrors []error
+{{- if .HTTP }}
+	if r.http != nil {
+		if err := r.http.Shutdown(ctx); err != nil {
+			shutdownErrors = append(shutdownErrors, fmt.Errorf("r.http.Shutdown: %w", err))
+		}
+	}
+{{- end }}
+{{- if .GRPC }}
+	if r.grpc != nil {
+		stopped := make(chan struct{})
+		go func() { r.grpc.GracefulStop(); close(stopped) }()
+		select {
+		case <-stopped:
+		case <-ctx.Done():
+			r.grpc.Stop()
+			<-stopped
+			shutdownErrors = append(shutdownErrors, fmt.Errorf("grpc shutdown: %w", ctx.Err()))
+		}
+	}
+{{- end }}
+{{- if .Health }}
+	if r.health != nil {
+		if err := r.health.Shutdown(ctx); err != nil {
+			shutdownErrors = append(shutdownErrors, fmt.Errorf("r.health.Shutdown: %w", err))
+		}
+	}
+{{- end }}
+{{- if .Pprof }}
+	if r.pprof != nil {
+		if err := r.pprof.Shutdown(ctx); err != nil {
+			shutdownErrors = append(shutdownErrors, fmt.Errorf("r.pprof.Shutdown: %w", err))
+		}
+	}
+{{- end }}
+	return errors.Join(shutdownErrors...)
+}
