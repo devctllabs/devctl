@@ -1,0 +1,26 @@
+[tools]
+go = "1.26.0"
+golangci-lint = "2.12.2"
+
+[tasks.fmt]
+run = "golangci-lint fmt"
+[tasks."fmt:check"]
+run = "golangci-lint fmt --diff"
+[tasks."lint:contracts"]
+run = "devctl lint"
+[tasks."lint:go"]
+run = "golangci-lint run"
+[tasks.lint]
+depends = ["lint:contracts", "lint:go"]
+[tasks.test]
+run = "go test ./..."
+[tasks.gen]
+run = "devctl gen"
+[tasks."gen:http"]
+run = "devctl gen http"
+[tasks."gen:grpc"]
+run = "devctl gen grpc"
+[tasks."gen:kafka"]
+run = "devctl gen kafka"
+[tasks.check]
+depends = ["fmt:check", "lint", "test"]

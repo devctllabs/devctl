@@ -1,0 +1,27 @@
+package internal
+
+import (
+	"context"
+	"fmt"
+
+	"example.test/sample-api/internal/deps"
+	"github.com/urfave/cli/v3"
+)
+
+// NewCmdAPI constructs the API server command.
+func NewCmdAPI() *cli.Command {
+	return &cli.Command{
+		Name:  "api",
+		Usage: "Run API servers",
+		Action: func(ctx context.Context, _ *cli.Command) error {
+			scenario, err := deps.NewAPI(ctx)
+			if err != nil {
+				return fmt.Errorf("deps.NewAPI: %w", err)
+			}
+			if err := scenario.Run(ctx); err != nil {
+				return fmt.Errorf("scenario.Run: %w", err)
+			}
+			return nil
+		},
+	}
+}

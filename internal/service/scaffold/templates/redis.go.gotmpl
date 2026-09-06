@@ -1,0 +1,18 @@
+package deps
+
+import (
+	"context"
+
+	"github.com/devctllabs/go-libs/di"
+	redis "github.com/redis/go-redis/v9"
+)
+
+{{- range . }}
+const redis{{ goName .Name }}Key = "redis-connection:{{ .Name }}"
+
+func provideRedis{{ goName .Name }}(_ context.Context, graph *di.Container, cfg *Config) error {
+	return di.ProvideNamedResource(graph, redis{{ goName .Name }}Key, func(di.Resolver) (*redis.Client, error) {
+		return redis.NewClient(&redis.Options{Addr: cfg.Redis.{{ goName .Name }}Address}), nil
+	}, func(ctx context.Context, client *redis.Client) error { return client.Close() })
+}
+{{- end }}

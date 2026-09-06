@@ -1,0 +1,46 @@
+package deps
+
+import (
+	"context"
+{{- if or .HTTP .GRPC .Calls }}
+	"fmt"
+{{- end }}
+
+	"github.com/devctllabs/go-libs/di"
+{{- if .HTTP }}
+	"github.com/labstack/echo/v5"
+{{- end }}
+{{- if .GRPC }}
+	"google.golang.org/grpc"
+{{- end }}
+)
+
+// application is the user-owned composition root. Add application dependencies here.
+type application struct{}
+
+{{- if .HTTP }}
+func (*application) RegisterHTTP(*echo.Echo) {}
+{{- end }}
+{{- if .GRPC }}
+func (*application) RegisterGRPC(*grpc.Server) {}
+{{- end }}
+
+// provideApplication is created once. Add newly scaffolded provider calls manually.
+func provideApplication(ctx context.Context, graph *di.Container, cfg *Config) error {
+{{- if .HTTP }}
+	if err := di.Provide[HTTPRegistrar](graph, func(di.Resolver) (HTTPRegistrar, error) { return &application{}, nil }); err != nil {
+		return fmt.Errorf("di.Provide HTTPRegistrar: %w", err)
+	}
+{{- end }}
+{{- if .GRPC }}
+	if err := di.Provide[GRPCRegistrar](graph, func(di.Resolver) (GRPCRegistrar, error) { return &application{}, nil }); err != nil {
+		return fmt.Errorf("di.Provide GRPCRegistrar: %w", err)
+	}
+{{- end }}
+{{- range .Calls }}
+	if err := {{ . }}(ctx, graph, cfg); err != nil {
+		return fmt.Errorf("{{ . }}: %w", err)
+	}
+{{- end }}
+	return nil
+}

@@ -1,0 +1,28 @@
+package deps
+
+import (
+	"context"
+	"net/http"
+
+	"github.com/devctllabs/go-libs/di"
+)
+
+type httpBaseURL string
+
+{{- range . }}
+const httpClient{{ goName .Name }}Key = "http-client:{{ .Name }}"
+
+func provide{{ goName .Name }}HTTPClient(_ context.Context, graph *di.Container, cfg *Config) error {
+	if err := di.ProvideNamedValue(graph, httpClient{{ goName .Name }}Key, &http.Client{}); err != nil { return err }
+	return di.ProvideNamedValue(graph, httpClient{{ goName .Name }}Key, httpBaseURL(cfg.HTTPClients.{{ goName .Name }}BaseURL))
+}
+
+func {{ goName .Name }}HTTPTransport(resolver di.Resolver) (*http.Client, error) {
+	return di.ResolveNamed[*http.Client](resolver, httpClient{{ goName .Name }}Key)
+}
+
+func {{ goName .Name }}HTTPBaseURL(resolver di.Resolver) (string, error) {
+	value, err := di.ResolveNamed[httpBaseURL](resolver, httpClient{{ goName .Name }}Key)
+	return string(value), err
+}
+{{- end }}

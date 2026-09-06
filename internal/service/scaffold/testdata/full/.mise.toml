@@ -1,0 +1,52 @@
+[tools]
+go = "1.26.0"
+golangci-lint = "2.12.2"
+node = "24"
+"npm:quicktype" = "26.0.0"
+"go:github.com/golang-migrate/migrate/v4/cmd/migrate" = { version = "v4.19.1", tags = ["clickhouse"] }
+
+[tasks.fmt]
+run = "golangci-lint fmt"
+[tasks."fmt:check"]
+run = "golangci-lint fmt --diff"
+[tasks."lint:contracts"]
+run = "devctl lint"
+[tasks."lint:go"]
+run = "golangci-lint run"
+[tasks.lint]
+depends = ["lint:contracts", "lint:go"]
+[tasks.test]
+run = "go test ./..."
+[tasks.gen]
+run = "devctl gen"
+[tasks."gen:http"]
+run = "devctl gen http"
+[tasks."gen:grpc"]
+run = "devctl gen grpc"
+[tasks."gen:kafka"]
+run = "devctl gen kafka"
+[tasks.check]
+depends = ["fmt:check", "lint", "test"]
+
+[tasks."migrate:analytics:clickhouse:create"]
+description = "Create timestamped migration files in migrations/analytics/clickhouse"
+usage = 'arg "<name>" help="Migration name"'
+run = '''
+migrate create -ext sql -dir "migrations/analytics/clickhouse" -format "20060102150405" "${usage_name?}"
+'''
+
+[tasks."migrate:analytics:clickhouse:up"]
+description = "Apply migrations from migrations/analytics/clickhouse"
+run = '''
+database_url="${SAMPLE_DB_ANALYTICS_CLICKHOUSE_MIGRATIONS_URL:?set SAMPLE_DB_ANALYTICS_CLICKHOUSE_MIGRATIONS_URL}"
+migrate -path "migrations/analytics/clickhouse" -database "$database_url" up
+'''
+
+[tasks."migrate:analytics:clickhouse:down"]
+description = "Roll back migrations from migrations/analytics/clickhouse"
+usage = 'arg "[steps]" default="1" help="Number of migrations"'
+confirm = "Roll back migrate:analytics:clickhouse migrations?"
+run = '''
+database_url="${SAMPLE_DB_ANALYTICS_CLICKHOUSE_MIGRATIONS_URL:?set SAMPLE_DB_ANALYTICS_CLICKHOUSE_MIGRATIONS_URL}"
+migrate -path "migrations/analytics/clickhouse" -database "$database_url" down "${usage_steps?}"
+'''

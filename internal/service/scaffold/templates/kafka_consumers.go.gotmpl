@@ -1,0 +1,61 @@
+package deps
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/devctllabs/go-libs/di"
+	kafka "github.com/devctllabs/go-libs/kafka"
+{{- if hasProto .Consumers }}
+	kafkaproto "github.com/devctllabs/go-libs/kafkaproto"
+{{- end }}
+	retry "github.com/devctllabs/go-libs/retry"
+)
+
+func rawKafkaDecoder() kafka.Decoder[[]byte] {
+	// The consumer owns the record bytes until Handle returns; handlers must not retain a batch.
+	return kafka.DecoderFunc[[]byte](func(_ context.Context, value []byte) ([]byte, error) { return value, nil })
+}
+
+func jsonKafkaDecoder[T any]() kafka.Decoder[T] { return kafka.NewJSONDecoder[T]() }
+
+{{- if hasProto .Consumers }}
+func protoKafkaDecoder[T any, PT kafkaproto.ProtoPtr[T]]() kafka.Decoder[PT] {
+	return kafkaproto.NewDecoder[T, PT]()
+}
+{{- end }}
+
+func provideConsumer[T any](graph *di.Container, key string) error {
+	return di.ProvideNamed[scenarioRunner](graph, key, func(resolver di.Resolver) (scenarioRunner, error) {
+		config, err := di.ResolveNamed[kafka.ConsumerConfig](resolver, key)
+		if err != nil { return nil, fmt.Errorf("resolve consumer config: %w", err) }
+		decoder, err := di.ResolveNamed[kafka.Decoder[T]](resolver, key)
+		if err != nil { return nil, fmt.Errorf("resolve consumer decoder: %w", err) }
+		handler, err := di.ResolveNamed[kafka.BatchHandler[T]](resolver, key)
+		if err != nil { return nil, fmt.Errorf("resolve consumer handler: %w", err) }
+		policy, err := di.ResolveNamed[retry.Policy](resolver, key)
+		if err != nil { return nil, fmt.Errorf("resolve consumer retry policy: %w", err) }
+		config.Retry.Policy = policy
+		config.CommitRetry = &config.Retry
+		consumer, err := kafka.NewConsumer(config, decoder, handler)
+		if err != nil { return nil, fmt.Errorf("kafka.NewConsumer: %w", err) }
+		return consumer, nil
+	})
+}
+
+{{- range .Consumers }}
+func provide{{ goName .Name }}ConsumerConfig(_ context.Context, graph *di.Container, cfg *Config) error {
+	key := kafkaConsumerKey({{ printf "%q" .Name }})
+	return di.ProvideNamedValue(graph, key, kafka.ConsumerConfig{
+		Brokers: cfg.Kafka.Brokers,
+		Group: cfg.Kafka.{{ goName .Name }}Group,
+		Topics: []string{cfg.Kafka.{{ goName .Name }}Topic},
+		Batch: kafka.BatchConfig{MaxSize: cfg.Kafka.{{ goName .Name }}BatchMaxSize, FlushInterval: cfg.Kafka.{{ goName .Name }}BatchFlushInterval},
+		Retry: kafka.RetryConfig{MaxAttempts: uint(cfg.Kafka.{{ goName .Name }}RetryMaxAttempts), MaxElapsedTime: cfg.Kafka.{{ goName .Name }}RetryMaxElapsedTime},
+		OnReject: kafka.RejectStop,
+		RebalanceTimeout: cfg.Kafka.{{ goName .Name }}RebalanceTimeout,
+		RebalanceDrainTimeout: cfg.Kafka.{{ goName .Name }}RebalanceDrainTimeout,
+		ShutdownTimeout: cfg.Kafka.{{ goName .Name }}ShutdownTimeout,
+	})
+}
+{{- end }}

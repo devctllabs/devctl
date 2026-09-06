@@ -1,0 +1,23 @@
+package deps
+
+import (
+	"context"
+
+	"github.com/devctllabs/go-libs/di"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+)
+
+{{- range . }}
+const grpcClient{{ goName .Name }}Key = "grpc-client:{{ .Name }}"
+
+func provide{{ goName .Name }}GRPCClient(_ context.Context, graph *di.Container, cfg *Config) error {
+	return di.ProvideNamedResource(graph, grpcClient{{ goName .Name }}Key, func(di.Resolver) (*grpc.ClientConn, error) {
+		return grpc.NewClient(cfg.GRPCClients.{{ goName .Name }}Address, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	}, func(_ context.Context, connection *grpc.ClientConn) error { return connection.Close() })
+}
+
+func {{ goName .Name }}GRPCConn(resolver di.Resolver) (*grpc.ClientConn, error) {
+	return di.ResolveNamed[*grpc.ClientConn](resolver, grpcClient{{ goName .Name }}Key)
+}
+{{- end }}

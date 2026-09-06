@@ -1,0 +1,50 @@
+[tools]
+go = "1.26.0"
+golangci-lint = "2.12.2"
+"go:github.com/golang-migrate/migrate/v4/cmd/migrate" = { version = "v4.19.1", tags = ["postgres"] }
+
+[tasks.fmt]
+run = "golangci-lint fmt"
+[tasks."fmt:check"]
+run = "golangci-lint fmt --diff"
+[tasks."lint:contracts"]
+run = "devctl lint"
+[tasks."lint:go"]
+run = "golangci-lint run"
+[tasks.lint]
+depends = ["lint:contracts", "lint:go"]
+[tasks.test]
+run = "go test ./..."
+[tasks.gen]
+run = "devctl gen"
+[tasks."gen:http"]
+run = "devctl gen http"
+[tasks."gen:grpc"]
+run = "devctl gen grpc"
+[tasks."gen:kafka"]
+run = "devctl gen kafka"
+[tasks.check]
+depends = ["fmt:check", "lint", "test"]
+
+[tasks."migrate:primary:postgres:create"]
+description = "Create timestamped migration files in migrations/primary/postgres"
+usage = 'arg "<name>" help="Migration name"'
+run = '''
+migrate create -ext sql -dir "migrations/primary/postgres" -format "20060102150405" "${usage_name?}"
+'''
+
+[tasks."migrate:primary:postgres:up"]
+description = "Apply migrations from migrations/primary/postgres"
+run = '''
+database_url="${ORDERS_API_DB_PRIMARY_POSTGRES_MIGRATIONS_URL:?set ORDERS_API_DB_PRIMARY_POSTGRES_MIGRATIONS_URL}"
+migrate -path "migrations/primary/postgres" -database "$database_url" up
+'''
+
+[tasks."migrate:primary:postgres:down"]
+description = "Roll back migrations from migrations/primary/postgres"
+usage = 'arg "[steps]" default="1" help="Number of migrations"'
+confirm = "Roll back migrate:primary:postgres migrations?"
+run = '''
+database_url="${ORDERS_API_DB_PRIMARY_POSTGRES_MIGRATIONS_URL:?set ORDERS_API_DB_PRIMARY_POSTGRES_MIGRATIONS_URL}"
+migrate -path "migrations/primary/postgres" -database "$database_url" down "${usage_steps?}"
+'''

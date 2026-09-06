@@ -1,0 +1,72 @@
+version: 1
+project:
+  name: orders-api
+  language: go
+env: {}
+paths:
+  external_contracts: api/external
+sources: {}
+exports: {}
+components:
+  http:
+    server:
+      openapi: api/openapi/swagger.yaml
+      start:
+        env: HTTP_SERVER_ENABLED
+        default: true
+    env:
+      system:
+        - key: HTTP_ADDR
+          type: string
+          default: :8080
+  logging:
+    env:
+      system:
+        - key: LOG_LEVEL
+          type: string
+          default: info
+  health:
+    server:
+      start:
+        env: HEALTH_SERVER_ENABLED
+        default: true
+    env:
+      system:
+        - key: HEALTH_ADDR
+          type: string
+          default: :8081
+  telemetry:
+    start:
+      env: TELEMETRY_ENABLED
+      default: false
+  db:
+    connections:
+      - name: primary
+        default: postgres
+        variants:
+          - name: postgres
+            kind: postgres
+            dsn_env: DB_PRIMARY_POSTGRES_DSN
+            secret: true
+            migrations:
+              path: migrations/primary/postgres
+              database_env: DB_PRIMARY_POSTGRES_MIGRATIONS_URL
+languages:
+  go:
+    module: example.com/orders-api
+    generators:
+      http:
+        oapi_config: tools/oapi/server.yaml
+        server_out: gen/serverhttp
+        client_out: gen/clienthttp
+    components:
+      pprof:
+        server:
+          start:
+            env: PPROF_ENABLED
+            default: false
+        env:
+          system:
+            - key: PPROF_ADDR
+              type: string
+              default: 127.0.0.1:6060
