@@ -1,7 +1,6 @@
 [tools]
 go = "1.26.0"
 golangci-lint = "2.12.2"
-"go:github.com/golang-migrate/migrate/v4/cmd/migrate" = { version = "v4.19.1", tags = ["postgres"] }
 
 [tasks.fmt]
 run = "golangci-lint fmt"
@@ -30,21 +29,39 @@ depends = ["fmt:check", "lint", "test"]
 description = "Create timestamped migration files in migrations/primary/postgres"
 usage = 'arg "<name>" help="Migration name"'
 run = '''
-migrate create -ext sql -dir "migrations/primary/postgres" -format "20060102150405" "${usage_name?}"
+devctl migrate create --target "primary:postgres" "${usage_name?}"
 '''
 
 [tasks."migrate:primary:postgres:up"]
 description = "Apply migrations from migrations/primary/postgres"
+usage = '''
+flag "--steps <N>" help="Apply N migrations; omit to apply all"
+flag "--env-file <path>" help="Read migration URL from dotenv file"
+'''
 run = '''
-database_url="${ORDERS_API_DB_PRIMARY_POSTGRES_MIGRATIONS_URL:?set ORDERS_API_DB_PRIMARY_POSTGRES_MIGRATIONS_URL}"
-migrate -path "migrations/primary/postgres" -database "$database_url" up
+set --
+if [ -n "${usage_steps:-}" ]; then set -- --steps "$usage_steps"; fi
+if [ -n "${usage_env_file:-}" ]; then set -- "$@" --env-file "$usage_env_file"; fi
+devctl migrate up --target "primary:postgres" "$@"
 '''
 
 [tasks."migrate:primary:postgres:down"]
 description = "Roll back migrations from migrations/primary/postgres"
-usage = 'arg "[steps]" default="1" help="Number of migrations"'
-confirm = "Roll back migrate:primary:postgres migrations?"
+usage = '''
+arg "[steps]" default="1" help="Number of migrations"
+flag "--env-file <path>" help="Read migration URL from dotenv file"
+'''
 run = '''
-database_url="${ORDERS_API_DB_PRIMARY_POSTGRES_MIGRATIONS_URL:?set ORDERS_API_DB_PRIMARY_POSTGRES_MIGRATIONS_URL}"
-migrate -path "migrations/primary/postgres" -database "$database_url" down "${usage_steps?}"
+set --
+if [ -n "${usage_env_file:-}" ]; then set -- --env-file "$usage_env_file"; fi
+devctl migrate down --target "primary:postgres" --steps "${usage_steps?}" "$@"
+'''
+
+[tasks."migrate:primary:postgres:status"]
+description = "Show migration version and dirty state for primary:postgres"
+usage = 'flag "--env-file <path>" help="Read migration URL from dotenv file"'
+run = '''
+set --
+if [ -n "${usage_env_file:-}" ]; then set -- --env-file "$usage_env_file"; fi
+devctl migrate status --target "primary:postgres" "$@"
 '''

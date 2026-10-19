@@ -2,6 +2,8 @@
 
 Every executable leaf accepts `--json`; text output is the default.
 `--verbose` independently enables debug diagnostics and raw causes.
+Migration failures keep database URLs, credentials, and SQL out of messages even
+under `--verbose`; their safe reason and target context remain available.
 
 ## JSONL success
 
@@ -69,6 +71,12 @@ The command-specific payload is under `data` on success and may appear under
 | `inspect` | `{project: {...}}` |
 | `lint` | `{valid, contracts, issues}` |
 | `sync`, `gen` | `{targets, changes, dry_run}` |
+| `migrate create` | `{target, files}` |
+| `migrate up`, `migrate down`, `migrate status` | `{target, version, dirty}`; up-to-date up adds `no_change: true` |
+
+Migration `version` is null before any migration and after a complete rollback.
+Dirty `status` is a successful result with exit code 0. A failed migration may
+include the observed version and dirty state in `details.partial_result`.
 
 Publication actions are `created`, `updated`, `unchanged`, and `removed`.
 Static previews use `planned_publish` and `planned_remove`.

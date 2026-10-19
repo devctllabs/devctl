@@ -69,7 +69,7 @@ languages:
     module: example.com/orders-api
     generators:
       config:
-        out: gen/config/config.gen.go
+        out: gen/config
       http:
         oapi_config: tools/oapi/server.yaml
         server_out: gen/serverhttp
@@ -96,7 +96,7 @@ languages:
 | Field | Required | Effective default |
 |---|:---:|---|
 | `languages.go.module` | yes | none |
-| `generators.config.out` | no | `gen/config/config.gen.go` |
+| `generators.config.out` | no | `gen/config` (output directory) |
 | `generators.http.oapi_config` | no | `tools/oapi/server.yaml` |
 | `generators.http.server_out` | no | `gen/serverhttp` |
 | `generators.http.client_out` | no | `gen/clienthttp` |
@@ -109,6 +109,10 @@ Every Go Project has an implicit config Target even if `generators.config` is
 omitted. Canonical native generator configs are Managed Outputs. An explicitly
 selected alternate config is user-owned, must already exist, and is never
 created or replaced by scaffold.
+
+The config Target writes `config.gen.go` inside `generators.config.out`, so its
+default resulting file is `gen/config/config.gen.go`. An explicitly declared
+canonical native config path remains managed.
 
 `languages.go.components.pprof` uses the same `start` and component `env`
 shapes described in [Components](components.md). The HTTP service preset uses

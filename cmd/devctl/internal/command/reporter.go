@@ -6,6 +6,7 @@ import (
 
 	"github.com/devctllabs/devctl/internal/domain/contract"
 	"github.com/devctllabs/devctl/internal/domain/failure"
+	migrationdomain "github.com/devctllabs/devctl/internal/domain/migration"
 	projectdomain "github.com/devctllabs/devctl/internal/domain/project"
 	"github.com/urfave/cli/v3"
 	"go.uber.org/zap"
@@ -92,6 +93,22 @@ func classifyError(err error) errorReport {
 		report.addDetail("field", metadataErr.Field)
 		report.addDetail("reason", string(metadataErr.Reason))
 		report.addDetail("hint", metadataErr.Hint)
+	}
+	var migrationErr *migrationdomain.Error
+	if errors.As(err, &migrationErr) {
+		report.addDetail("reason", migrationErr.Reason)
+		if migrationErr.Target != "" {
+			report.addDetail("target", migrationErr.Target)
+		}
+		if migrationErr.Path != "" {
+			report.addDetail("path", migrationErr.Path)
+		}
+		if migrationErr.EnvKey != "" {
+			report.addDetail("env", migrationErr.EnvKey)
+		}
+		if len(migrationErr.Candidates) > 0 {
+			report.addDetail("targets", migrationErr.Candidates)
+		}
 	}
 	return report
 }

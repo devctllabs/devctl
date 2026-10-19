@@ -2,6 +2,7 @@
 
 - Status: accepted
 - Date: 2026-09-03
+- Command list amended by [ADR 0009](0009-explicit-migration-execution.md).
 
 ## Context
 
@@ -13,7 +14,7 @@ and network effects difficult to predict.
 
 ## Decision
 
-The v1 CLI has exactly eight top-level commands: `init`, `validate`, `inspect`,
+The initial v1 CLI had eight top-level commands: `init`, `validate`, `inspect`,
 `enable`, `add`, `sync`, `lint`, and `gen`. Initialization is explicit through
 `init manifest` and `init scaffold`. Manifest mutations do not install tools,
 run generators, or change handwritten Go. `sync`, `lint`, and `gen` never

@@ -35,7 +35,7 @@ func inspectProject(selected projectdomain.Project, targets []projectdomain.Targ
 		Name: manifest.Project.Name, Language: manifest.Project.Language,
 		Module: manifest.Languages.Go.Module, EnvPrefix: catalog.Prefix(),
 		Paths: effectivePaths(manifest), Targets: inspectionTargets(targets),
-		Env: effectiveEnv(catalog), Resources: effectiveResources(manifest, catalog.Prefix()),
+		Env: effectiveEnv(catalog), Resources: effectiveResources(manifest),
 	}, nil
 }
 
@@ -86,9 +86,19 @@ func (s *Service) inspectionTargets(
 	return result
 }
 
-func effectiveResources(manifest projectdomain.Manifest, envPrefix string) projectdomain.InspectionResources {
+func effectiveResources(manifest projectdomain.Manifest) projectdomain.InspectionResources {
 	resources := projectdomain.InspectionResources{}
-	appendDBResources(&resources, manifest.Components.DB, envPrefix)
+	if manifest.Components.DB != nil {
+		for _, connection := range manifest.Components.DB.Connections {
+			resources.DBConnections = append(resources.DBConnections, connection.Name)
+		}
+	}
+	for _, target := range projectdomain.MigrationTargets(manifest) {
+		resources.Migrations = append(resources.Migrations, projectdomain.InspectionMigration{
+			Connection: target.Connection, Variant: target.Variant, Kind: target.Kind,
+			Path: target.Path, DatabaseEnv: target.DatabaseEnv,
+		})
+	}
 	if manifest.Components.Redis != nil {
 		for _, value := range manifest.Components.Redis.Connections {
 			resources.RedisConnections = append(resources.RedisConnections, value.Name)
@@ -114,27 +124,4 @@ func effectiveResources(manifest projectdomain.Manifest, envPrefix string) proje
 		return left.Variant < right.Variant
 	})
 	return resources
-}
-
-func appendDBResources(resources *projectdomain.InspectionResources, database *projectdomain.DB, envPrefix string) {
-	if database == nil {
-		return
-	}
-	for _, connection := range database.Connections {
-		resources.DBConnections = append(resources.DBConnections, connection.Name)
-		appendMigrations(resources, connection, envPrefix)
-	}
-}
-
-func appendMigrations(resources *projectdomain.InspectionResources, connection projectdomain.DBConnection, envPrefix string) {
-	for _, variant := range connection.Variants {
-		migrations := variant.Migrations
-		if migrations == nil {
-			continue
-		}
-		resources.Migrations = append(resources.Migrations, projectdomain.InspectionMigration{
-			Connection: connection.Name, Variant: variant.Name, Kind: variant.Kind,
-			Path: migrations.Path, DatabaseEnv: envPrefix + migrations.DatabaseEnv,
-		})
-	}
 }

@@ -15,6 +15,19 @@ devctl add db analytics --kind clickhouse
 Migration targets default to `migrations/<connection>/<variant>`. Override the
 path with `--migrations-path`, or opt out with `--no-migrations`.
 
+Create SQL and execute migrations explicitly:
+
+```sh
+devctl migrate create create_orders --target primary:postgres
+devctl migrate up --target primary:postgres --env-file .env.local
+devctl migrate status --target primary:postgres
+```
+
+For CI, supply the migration URL through the process environment and use
+`devctl migrate up --target primary:postgres --json`. See
+[migration configuration and CI](generated-project.md#migration-configuration-and-ci)
+for source precedence, path rules, and failure behavior.
+
 A Connection with several Variants must name a default. ClickHouse cannot be
 mixed with SQLite or PostgreSQL Variants in the same logical Connection because
 its native runtime is not transactional.
@@ -99,7 +112,7 @@ devctl add kafka-producer created \
   --topic orders.created.v1 \
   --format json \
   --source contracts \
-  --path orders-created.schema.json
+  --path orders.created.v1.json
 
 devctl add kafka-consumer billing \
   --topic billing.events.v1 \
@@ -111,7 +124,8 @@ devctl add kafka-consumer billing \
 ```
 
 `raw` has no Contract files and supports inspect/lint but not sync or code
-generation. JSON Schema roots need a non-empty `title`. Proto encoding is
+generation. JSON Schema roots need a non-empty `title`. For local Sources, the
+schema basename must be `<topic>.json` or `<topic>.proto`. Proto encoding is
 `binary` or `json`.
 
 ## Targeted previews

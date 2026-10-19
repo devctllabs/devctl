@@ -61,12 +61,21 @@ go mod tidy
 mise run check
 ```
 
-## Supplier and consumer Buf files
+## Generator configuration ownership
+
+Canonical native generator configs are Managed Outputs. Alternate HTTP
+`oapi_config` and Proto `buf_gen_config` files are user-owned: create them before
+validation or generation; scaffold does not create or replace them. HTTP Targets
+may share a custom config, but its path must not collide with a scaffold
+artifact. Explicitly spelling a canonical config path keeps it managed.
 
 For Proto, the supplier's `buf.yaml` and adjacent `buf.lock` travel with the
-Contract Snapshot. The consuming Project owns `*.gen.yaml`. Canonical consumer
-configs are Managed Outputs; an explicitly selected `buf_gen_config` is
-user-owned and must already exist before validation or generation.
+Contract Snapshot. The consuming Project separately owns `*.gen.yaml` and its
+generation policy.
+
+Lint and generation do not reacquire Contract suppliers. Their external tools
+may still need module or plugin downloads, so prepare tool dependencies and
+caches before relying on execution without network access.
 
 ## When to run each command
 

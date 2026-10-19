@@ -423,9 +423,9 @@ func TestPlanAppliesHTTPArtifactPolicies(t *testing.T) {
 		artifacts := plannedArtifacts(t, manifest)
 
 		require.True(t, artifacts["contracts/service.yaml"].CreateOnly)
-		require.False(t, artifacts["tools/oapi/custom-server.yaml"].CreateOnly)
+		require.NotContains(t, artifacts, "tools/oapi/custom-server.yaml")
 		require.False(t, artifacts["tools/oapi/clients.catalog.yaml"].CreateOnly)
-		require.False(t, artifacts["tools/oapi/orders.yaml"].CreateOnly)
+		require.NotContains(t, artifacts, "tools/oapi/orders.yaml")
 		require.NotContains(t, artifacts, "tools/oapi/server.yaml")
 		require.NotContains(t, artifacts, "api/openapi/swagger.yaml")
 		requireArtifactContains(t, artifacts, "go.mod", "tool github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen")
@@ -595,21 +595,21 @@ func TestPlanScaffoldsMigrationTargetsAndMiseTasks(t *testing.T) {
 			Confirm any    `toml:"confirm"`
 		} `toml:"tasks"`
 	}
-	metadata, err := toml.Decode(string(artifacts[".mise.toml"].Content), &mise)
+	_, err := toml.Decode(string(artifacts[".mise.toml"].Content), &mise)
 	require.NoError(t, err)
-	var migrateTool struct {
-		Version string   `toml:"version"`
-		Tags    []string `toml:"tags"`
-	}
-	require.NoError(t, metadata.PrimitiveDecode(mise.Tools["go:github.com/golang-migrate/migrate/v4/cmd/migrate"], &migrateTool))
-	require.Equal(t, "v4.19.1", migrateTool.Version)
-	require.Equal(t, []string{"postgres", "sqlite"}, migrateTool.Tags)
+	require.NotContains(t, mise.Tools, "go:github.com/golang-migrate/migrate/v4/cmd/migrate")
 	require.Equal(t, `arg "<name>" help="Migration name"`, mise.Tasks["migrate:primary:sqlite:create"].Usage)
-	require.Contains(t, mise.Tasks["migrate:primary:sqlite:create"].Run, `-format "20060102150405" "${usage_name?}"`)
-	require.Contains(t, mise.Tasks["migrate:primary:sqlite:up"].Run, `${APP_DB_PRIMARY_SQLITE_MIGRATIONS_URL:-sqlite://./data/primary.db?_pragma=foreign_keys%281%29}`)
-	require.Equal(t, `arg "[steps]" default="1" help="Number of migrations"`, mise.Tasks["migrate:primary:sqlite:down"].Usage)
-	require.NotNil(t, mise.Tasks["migrate:primary:sqlite:down"].Confirm)
-	require.Contains(t, mise.Tasks["migrate:archive:postgres:up"].Run, `${APP_ARCHIVE_MIGRATIONS_URL:?set APP_ARCHIVE_MIGRATIONS_URL}`)
+	require.Contains(t, mise.Tasks["migrate:primary:sqlite:create"].Run, `devctl migrate create --target "primary:sqlite" "${usage_name?}"`)
+	require.Contains(t, mise.Tasks["migrate:primary:sqlite:up"].Usage, `flag "--steps <N>"`)
+	require.Contains(t, mise.Tasks["migrate:primary:sqlite:up"].Run, `--steps "$usage_steps"`)
+	require.Contains(t, mise.Tasks["migrate:primary:sqlite:up"].Run, `devctl migrate up --target "primary:sqlite"`)
+	require.Contains(t, mise.Tasks["migrate:primary:sqlite:down"].Usage, `arg "[steps]" default="1" help="Number of migrations"`)
+	require.Nil(t, mise.Tasks["migrate:primary:sqlite:down"].Confirm)
+	require.Contains(t, mise.Tasks["migrate:primary:sqlite:down"].Run, `--steps "${usage_steps?}"`)
+	require.Contains(t, mise.Tasks["migrate:archive:postgres:up"].Run, `devctl migrate up --target "archive:postgres"`)
+	require.Contains(t, mise.Tasks["migrate:archive:postgres:status"].Run, `devctl migrate status --target "archive:postgres"`)
+	require.Contains(t, mise.Tasks["migrate:archive:postgres:status"].Usage, `flag "--env-file <path>"`)
+	require.NotContains(t, string(artifacts[".mise.toml"].Content), "database_url=")
 	require.NotContains(t, mise.Tasks["migrate:archive:postgres:down"].Run, "-all")
 }
 
@@ -669,17 +669,11 @@ func TestPlanRejectsDuplicateArtifactPaths(t *testing.T) {
 			path: "go.mod",
 		},
 		{
-			name: "client generator configs collide",
+			name: "OpenAPI seed collides with canonical generator config",
 			configure: func(manifest *projectdomain.Manifest) {
-				manifest.Sources = map[string]projectdomain.Source{
-					"contracts": {Type: projectdomain.SourceLocal, Path: "api/contracts"},
-				}
-				manifest.Components.HTTP = &projectdomain.HTTP{Clients: []projectdomain.HTTPClient{
-					{Name: "catalog", Source: "contracts", Path: "catalog.yaml", OAPIConfig: "tools/oapi/shared.yaml"},
-					{Name: "orders", Source: "contracts", Path: "orders.yaml", OAPIConfig: "tools/oapi/shared.yaml"},
-				}}
+				manifest.Components.HTTP = &projectdomain.HTTP{Server: &projectdomain.HTTPServer{OpenAPI: "tools/oapi/server.yaml"}}
 			},
-			path: "tools/oapi/shared.yaml",
+			path: "tools/oapi/server.yaml",
 		},
 	}
 

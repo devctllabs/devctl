@@ -51,7 +51,7 @@ func TestRootHelp(t *testing.T) {
 	t.Parallel()
 	binary := buildCLI(t)
 	stdout := runCLI(t, binary, "--help")
-	for _, commandName := range []string{"init", "validate", "inspect", "enable", "add", "sync", "gen", "lint"} {
+	for _, commandName := range []string{"init", "validate", "inspect", "enable", "add", "sync", "gen", "lint", "migrate"} {
 		require.Contains(t, stdout, commandName)
 	}
 	require.NotContains(t, stdout, "--file")
@@ -494,7 +494,8 @@ languages:
 	require.FileExists(t, filepath.Join(root, "migrations/primary/sqlite/.gitkeep"))
 	var mise struct {
 		Tasks map[string]struct {
-			Run string `toml:"run"`
+			Run   string `toml:"run"`
+			Usage string `toml:"usage"`
 		} `toml:"tasks"`
 	}
 	_, err := toml.DecodeFile(filepath.Join(root, ".mise.toml"), &mise)
@@ -502,12 +503,28 @@ languages:
 	require.Contains(t, mise.Tasks, "migrate:primary:sqlite:create")
 	require.Contains(t, mise.Tasks, "migrate:primary:sqlite:up")
 	require.Contains(t, mise.Tasks, "migrate:primary:sqlite:down")
+	require.Contains(t, mise.Tasks, "migrate:primary:sqlite:status")
+	require.Contains(t, mise.Tasks["migrate:primary:sqlite:up"].Usage, `flag "--steps <N>"`)
+	// Exercise the generated wrapper, including a dotenv path containing spaces.
+	envFile := filepath.Join(root, "migration settings.env")
+	require.NoError(t, os.WriteFile(envFile, []byte("SAMPLE_DB_PRIMARY_SQLITE_MIGRATIONS_URL=sqlite://"+filepath.Join(root, "wrapper.db")+"\n"), 0o600))
+	status := exec.CommandContext(context.Background(), "sh", "-c", mise.Tasks["migrate:primary:sqlite:status"].Run)
+	status.Dir = root
+	status.Env = append(os.Environ(), "PATH="+filepath.Dir(binary)+string(os.PathListSeparator)+os.Getenv("PATH"), "usage_env_file="+envFile)
+	statusOutput, err := status.CombinedOutput()
+	require.NoError(t, err, "%s", statusOutput)
+	require.FileExists(t, filepath.Join(root, "wrapper.db"))
 	goMod, err := os.ReadFile(filepath.Join(root, "go.mod"))
 	require.NoError(t, err)
 	require.NotContains(t, string(goMod), "golang-migrate")
 
 	migrationPath := filepath.Join(root, "migrations/primary/sqlite/20260830010000_create_users.up.sql")
 	require.NoError(t, os.WriteFile(migrationPath, []byte("CREATE TABLE users (id INTEGER PRIMARY KEY);\n"), 0o644))
+	up := exec.CommandContext(context.Background(), "sh", "-c", mise.Tasks["migrate:primary:sqlite:up"].Run)
+	up.Dir = root
+	up.Env = append(os.Environ(), "PATH="+filepath.Dir(binary)+string(os.PathListSeparator)+os.Getenv("PATH"), "usage_env_file="+envFile, "usage_steps=1")
+	upOutput, err := up.CombinedOutput()
+	require.NoError(t, err, "%s", upOutput)
 	runCLI(t, binary, "init", "scaffold", "--file", manifestPath)
 	content, err := os.ReadFile(migrationPath)
 	require.NoError(t, err)

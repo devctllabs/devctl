@@ -130,5 +130,5 @@ An optional environment-backed gate for a Capability. It distinguishes
 construction of a runtime dependency from starting its background work.
 
 **Migration Target**:
-The migration path and migration-only environment belonging to one SQLite,
-PostgreSQL, or ClickHouse database Variant.
+The migration configuration of one SQLite, PostgreSQL, or ClickHouse database
+Variant, identified by its Connection and Variant.

@@ -3,7 +3,6 @@ go = "1.26.0"
 golangci-lint = "2.12.2"
 node = "24"
 "npm:quicktype" = "26.0.0"
-"go:github.com/golang-migrate/migrate/v4/cmd/migrate" = { version = "v4.19.1", tags = ["clickhouse"] }
 
 [tasks.fmt]
 run = "golangci-lint fmt"
@@ -32,21 +31,39 @@ depends = ["fmt:check", "lint", "test"]
 description = "Create timestamped migration files in migrations/analytics/clickhouse"
 usage = 'arg "<name>" help="Migration name"'
 run = '''
-migrate create -ext sql -dir "migrations/analytics/clickhouse" -format "20060102150405" "${usage_name?}"
+devctl migrate create --target "analytics:clickhouse" "${usage_name?}"
 '''
 
 [tasks."migrate:analytics:clickhouse:up"]
 description = "Apply migrations from migrations/analytics/clickhouse"
+usage = '''
+flag "--steps <N>" help="Apply N migrations; omit to apply all"
+flag "--env-file <path>" help="Read migration URL from dotenv file"
+'''
 run = '''
-database_url="${SAMPLE_DB_ANALYTICS_CLICKHOUSE_MIGRATIONS_URL:?set SAMPLE_DB_ANALYTICS_CLICKHOUSE_MIGRATIONS_URL}"
-migrate -path "migrations/analytics/clickhouse" -database "$database_url" up
+set --
+if [ -n "${usage_steps:-}" ]; then set -- --steps "$usage_steps"; fi
+if [ -n "${usage_env_file:-}" ]; then set -- "$@" --env-file "$usage_env_file"; fi
+devctl migrate up --target "analytics:clickhouse" "$@"
 '''
 
 [tasks."migrate:analytics:clickhouse:down"]
 description = "Roll back migrations from migrations/analytics/clickhouse"
-usage = 'arg "[steps]" default="1" help="Number of migrations"'
-confirm = "Roll back migrate:analytics:clickhouse migrations?"
+usage = '''
+arg "[steps]" default="1" help="Number of migrations"
+flag "--env-file <path>" help="Read migration URL from dotenv file"
+'''
 run = '''
-database_url="${SAMPLE_DB_ANALYTICS_CLICKHOUSE_MIGRATIONS_URL:?set SAMPLE_DB_ANALYTICS_CLICKHOUSE_MIGRATIONS_URL}"
-migrate -path "migrations/analytics/clickhouse" -database "$database_url" down "${usage_steps?}"
+set --
+if [ -n "${usage_env_file:-}" ]; then set -- --env-file "$usage_env_file"; fi
+devctl migrate down --target "analytics:clickhouse" --steps "${usage_steps?}" "$@"
+'''
+
+[tasks."migrate:analytics:clickhouse:status"]
+description = "Show migration version and dirty state for analytics:clickhouse"
+usage = 'flag "--env-file <path>" help="Read migration URL from dotenv file"'
+run = '''
+set --
+if [ -n "${usage_env_file:-}" ]; then set -- --env-file "$usage_env_file"; fi
+devctl migrate status --target "analytics:clickhouse" "$@"
 '''

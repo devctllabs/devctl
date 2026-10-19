@@ -55,16 +55,14 @@ func renderGoMod(data goModTemplateData) (string, error) {
 }
 
 type migrationTask struct {
-	TaskPrefix         string
-	Path               string
-	DatabaseExpression string
-	Kind               string
+	TaskPrefix string
+	Target     string
+	Path       string
 }
 
 type miseTemplateData struct {
-	JSON          bool
-	Migrations    []migrationTask
-	MigrationTags []string
+	JSON       bool
+	Migrations []migrationTask
 }
 
 func renderMise(data miseTemplateData) (string, error) {

@@ -25,6 +25,9 @@ go install github.com/devctllabs/devctl/cmd/devctl@latest
 devctl --version
 ```
 
+For builds from the current source checkout, see the
+[temporary sibling-module requirement](docs/development.md#working-with-sibling-modules).
+
 ## Start a Project
 
 ```sh
@@ -72,6 +75,7 @@ does not need `sync`, while a changed external Contract does.
 
 ## Documentation
 
+- [Documentation index](docs/README.md)
 - [User guide](docs/user-guide/README.md)
 - [Command reference](docs/user-guide/reference/commands.md)
 - [Manifest reference](docs/user-guide/reference/manifest/README.md)
