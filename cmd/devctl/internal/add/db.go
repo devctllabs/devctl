@@ -58,7 +58,7 @@ func newDBCmd(opts dbCmdOpts, build dbBuilder) *cli.Command {
 	return &cli.Command{
 		Name:                   "db",
 		Usage:                  "Add a database variant",
-		Description:            "Add a SQLite, PostgreSQL, or ClickHouse Variant to a named database Connection. A migration target is declared by default; Devctl never writes SQL or applies migrations.",
+		Description:            "Add a SQLite, PostgreSQL, or ClickHouse Variant to a named database Connection. A Migration Target is declared by default; use devctl migrate explicitly to create SQL files or run migrations.",
 		UsageText:              "devctl add db <database-name> --kind <sqlite|postgres|clickhouse>",
 		UseShortOptionHandling: true,
 		Arguments: []cli.Argument{&cli.StringArg{

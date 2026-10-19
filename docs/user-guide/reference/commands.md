@@ -4,7 +4,7 @@
 
 ## CLI interface - devctl
 
-Devctl defines, validates, and materializes reproducible Go projects from a devctl.yaml manifest. Commands are non-interactive and keep manifest mutation, synchronization, linting, scaffolding, and generation explicit.
+Devctl defines, validates, and materializes reproducible Go projects from a devctl.yaml manifest. Commands are non-interactive and keep manifest mutation, synchronization, linting, scaffolding, generation, and migration execution explicit.
 
 Manage Devctl Go projects.
 
@@ -293,7 +293,7 @@ Add a database variant.
 
 > devctl add db <database-name> --kind <sqlite|postgres|clickhouse>
 
-Add a SQLite, PostgreSQL, or ClickHouse Variant to a named database Connection. A migration target is declared by default; Devctl never writes SQL or applies migrations.
+Add a SQLite, PostgreSQL, or ClickHouse Variant to a named database Connection. A Migration Target is declared by default; use devctl migrate explicitly to create SQL files or run migrations.
 
 Usage:
 
@@ -841,3 +841,104 @@ The following flags are supported:
 | `--file="…"` | use `path` as the Manifest instead of discovering devctl.yaml | string |               |        *none*         |
 | `--json`     | emit compact JSONL events instead of text                     | bool   |    `false`    |        *none*         |
 | `--verbose`  | include debug diagnostics and raw causes on stderr            | bool   |    `false`    |        *none*         |
+
+### `migrate` command
+
+Create and run database migrations.
+
+Operate on one Manifest Migration Target. Select connection:variant explicitly, or omit --target when exactly one Migration Target exists.
+
+Usage:
+
+```bash
+$ devctl [GLOBAL FLAGS] migrate [ARGUMENTS...]
+```
+
+### `migrate create` subcommand
+
+Create a pair of timestamped SQL files.
+
+Create a pair of timestamped SQL files. Migration SQL is selected by migrations.path in the Manifest.
+
+Usage:
+
+```bash
+$ devctl [GLOBAL FLAGS] migrate create [COMMAND FLAGS] [ARGUMENTS...]
+```
+
+The following flags are supported:
+
+| Name           | Description                                                   | Type   | Default value | Environment variables |
+|----------------|---------------------------------------------------------------|--------|:-------------:|:---------------------:|
+| `--file="…"`   | use `path` as the Manifest instead of discovering devctl.yaml | string |               |        *none*         |
+| `--json`       | emit compact JSONL events instead of text                     | bool   |    `false`    |        *none*         |
+| `--verbose`    | include debug diagnostics and raw causes on stderr            | bool   |    `false`    |        *none*         |
+| `--target="…"` | select Migration Target `connection:variant`                  | string |               |        *none*         |
+
+### `migrate up` subcommand
+
+Apply all pending migrations, or a positive number with --steps.
+
+Apply all pending migrations, or a positive number with --steps. Migration SQL is selected by migrations.path in the Manifest.
+
+Usage:
+
+```bash
+$ devctl [GLOBAL FLAGS] migrate up [COMMAND FLAGS] [ARGUMENTS...]
+```
+
+The following flags are supported:
+
+| Name             | Description                                                          | Type   | Default value | Environment variables |
+|------------------|----------------------------------------------------------------------|--------|:-------------:|:---------------------:|
+| `--file="…"`     | use `path` as the Manifest instead of discovering devctl.yaml        | string |               |        *none*         |
+| `--json`         | emit compact JSONL events instead of text                            | bool   |    `false`    |        *none*         |
+| `--verbose`      | include debug diagnostics and raw causes on stderr                   | bool   |    `false`    |        *none*         |
+| `--target="…"`   | select Migration Target `connection:variant`                         | string |               |        *none*         |
+| `--env-file="…"` | read migration URL from this dotenv `path` after process environment | string |               |        *none*         |
+| `--steps="…"`    | apply positive `N` migrations; omit for all                          | int    |      `0`      |        *none*         |
+
+### `migrate down` subcommand
+
+Roll back migrations (one step by default).
+
+Roll back migrations (one step by default). Migration SQL is selected by migrations.path in the Manifest.
+
+Usage:
+
+```bash
+$ devctl [GLOBAL FLAGS] migrate down [COMMAND FLAGS] [ARGUMENTS...]
+```
+
+The following flags are supported:
+
+| Name             | Description                                                          | Type   | Default value | Environment variables |
+|------------------|----------------------------------------------------------------------|--------|:-------------:|:---------------------:|
+| `--file="…"`     | use `path` as the Manifest instead of discovering devctl.yaml        | string |               |        *none*         |
+| `--json`         | emit compact JSONL events instead of text                            | bool   |    `false`    |        *none*         |
+| `--verbose`      | include debug diagnostics and raw causes on stderr                   | bool   |    `false`    |        *none*         |
+| `--target="…"`   | select Migration Target `connection:variant`                         | string |               |        *none*         |
+| `--env-file="…"` | read migration URL from this dotenv `path` after process environment | string |               |        *none*         |
+| `--steps="…"`    | roll back `N` migrations                                             | int    |      `1`      |        *none*         |
+
+### `migrate status` subcommand
+
+Show migration version and dirty state.
+
+Read the current migration version. Opening a fresh target may initialize the metadata table and SQLite database file. Dirty state is a successful result.
+
+Usage:
+
+```bash
+$ devctl [GLOBAL FLAGS] migrate status [COMMAND FLAGS] [ARGUMENTS...]
+```
+
+The following flags are supported:
+
+| Name             | Description                                                          | Type   | Default value | Environment variables |
+|------------------|----------------------------------------------------------------------|--------|:-------------:|:---------------------:|
+| `--file="…"`     | use `path` as the Manifest instead of discovering devctl.yaml        | string |               |        *none*         |
+| `--json`         | emit compact JSONL events instead of text                            | bool   |    `false`    |        *none*         |
+| `--verbose`      | include debug diagnostics and raw causes on stderr                   | bool   |    `false`    |        *none*         |
+| `--target="…"`   | select Migration Target `connection:variant`                         | string |               |        *none*         |
+| `--env-file="…"` | read migration URL from this dotenv `path` after process environment | string |               |        *none*         |

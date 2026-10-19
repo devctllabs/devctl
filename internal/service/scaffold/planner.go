@@ -98,6 +98,9 @@ func plan(m projectdomain.Manifest) ([]Artifact, error) {
 	if err := ensureUniqueArtifactPaths(artifacts); err != nil {
 		return nil, fmt.Errorf("ensureUniqueArtifactPaths: %w", err)
 	}
+	if err := checkHTTPConfigOwnership(projection.http.targets, artifacts); err != nil {
+		return nil, fmt.Errorf("checkHTTPConfigOwnership: %w", err)
+	}
 	sort.SliceStable(artifacts, func(i, j int) bool { return artifacts[i].Path < artifacts[j].Path })
 	if err := formatGoArtifacts(artifacts); err != nil {
 		return nil, fmt.Errorf("formatGoArtifacts: %w", err)
@@ -383,6 +386,9 @@ func httpArtifacts(projection httpProjection) ([]Artifact, error) {
 			artifacts = append(artifacts, Artifact{target.Reference.Entrypoint, 0o644, seed, false})
 			templateName = "oapi-server.yaml"
 		}
+		if target.Config != canonicalHTTPConfig(target) {
+			continue
+		}
 		config, err := readTemplateAsset(templateName)
 		if err != nil {
 			return nil, fmt.Errorf("readTemplateAsset: %w", err)
@@ -390,6 +396,29 @@ func httpArtifacts(projection httpProjection) ([]Artifact, error) {
 		artifacts = append(artifacts, Artifact{target.Config, 0o644, config, false})
 	}
 	return artifacts, nil
+}
+
+func canonicalHTTPConfig(target projectdomain.Target) string {
+	if target.Role == "server" {
+		return "tools/oapi/server.yaml"
+	}
+	return "tools/oapi/clients." + target.Name + ".yaml"
+}
+
+func checkHTTPConfigOwnership(targets []projectdomain.Target, artifacts []Artifact) error {
+	planned := make(map[string]struct{}, len(artifacts))
+	for _, artifact := range artifacts {
+		planned[canonicalArtifactPath(artifact.Path)] = struct{}{}
+	}
+	for _, target := range targets {
+		if target.Config == canonicalHTTPConfig(target) {
+			continue
+		}
+		if _, exists := planned[canonicalArtifactPath(target.Config)]; exists {
+			return fmt.Errorf("custom HTTP config path collides with scaffold artifact %q", target.Config)
+		}
+	}
+	return nil
 }
 
 func formatGoArtifacts(artifacts []Artifact) error {

@@ -116,7 +116,7 @@ components:
         topic_env: KAFKA_CREATED_TOPIC
         contract:
           source: contracts
-          path: orders-created.schema.json
+          path: orders.created.v1.json
           format: json
     env: {}
 ```
@@ -127,7 +127,7 @@ same `contract` shape:
 
 | Field | Required | Description |
 |---|:---:|---|
-| `format` | yes | `raw`, `json`, or `proto` |
+| `format` | no | `raw` (default), `json`, or `proto` |
 | `source` | schema-backed | Existing Source |
 | `path` | conditional | Entrypoint for non-Devctl Sources |
 | `export` | conditional | Kafka Export for a Devctl Source |
@@ -135,10 +135,13 @@ same `contract` shape:
 | `message` | Proto only | Fully-qualified message name |
 | `encoding` | Proto only | `binary` or `json` |
 
-Raw endpoints have no Source, path, Export, or Proto fields. JSON Schema roots
-need a non-empty `title`, which owns the generated Go type name. Kafka Runtime
-Config also derives brokers, batching, retry, rebalance, drain, and shutdown
-settings from each effective endpoint.
+Schema-backed endpoints must explicitly choose `json` or `proto`; omitting
+`format` selects raw even if schema fields were provided, making those fields
+invalid. Raw endpoints have no Source, path, Export, or Proto fields. For local
+Sources, lint requires schema filenames `<topic>.json` or `<topic>.proto`.
+JSON Schema roots need a non-empty `title`, which owns the generated Go type
+name. Kafka Runtime Config also derives brokers, batching, retry, rebalance,
+drain, and shutdown settings from each effective endpoint.
 
 ## Databases
 

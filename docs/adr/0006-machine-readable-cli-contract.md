@@ -23,12 +23,15 @@ with stable `code` and `exit_code` fields. Safe scalar context belongs in
 `details.partial_result`; the reporter safely merges it with existing details,
 top-level error `data` is removed, and stdout remains empty. This pre-v1 wire
 change has no compatibility shim. Raw causes and external tool output appear
-only under `--verbose`.
+only under `--verbose`. Migration failures retain safe reasons and context even
+under verbose logging, as added by
+[ADR 0009](0009-explicit-migration-execution.md); SQL and credentials remain
+unrendered.
 
 Invalid `validate` and `lint` findings are normal results: the structured event
 is written to stdout, stderr is empty, and the process exits `1`. Execution
-errors also exit `1`, usage/help exits `2`, cancellation exits `130`, and
-success exits `0`.
+errors also exit `1`, invalid usage or help failure exits `2`, cancellation exits
+`130`, and success exits `0`.
 
 Public failure codes remain `usage`, `invalid_input`, `not_found`, `conflict`,
 `unavailable`, `unsupported`, `cancelled`, and `internal`. Adapters add safe

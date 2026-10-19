@@ -78,3 +78,31 @@ statements, use a migration DSN with `x-multi-statement=true`. Driver statement
 splitting can still leave a partial apply. Inspect the database, complete or
 revert the intended changes manually, and only then force the migration
 version. Devctl does not alter the DSN or perform recovery.
+
+## Migration target or URL is missing
+
+`migrate` requires one Migration Target. If several Variants have migrations,
+pass `--target connection:variant`; runtime defaults do not select migrations.
+Use `inspect` to find the configured path and fully prefixed migration env key.
+
+Set that key in process environment or an explicit `--env-file`. The Manifest's
+`database_default` is used only when the key is absent from both sources. An
+explicit empty value fails rather than selecting another connection. Devctl does
+not automatically load `.env` and never uses the runtime DSN as a fallback.
+
+When using `--file` from outside the Project, SQL files still resolve against
+the Project root, while relative SQLite database URLs and env-file paths resolve
+against your current working directory.
+
+## Migration database is dirty
+
+Run `devctl migrate status --target connection:variant --json` to inspect the
+version and dirty state. Status exits 0 when it reads dirty state successfully;
+`up` and `down` return `conflict`. Repair the database before changing its recorded
+version with external recovery tooling. Devctl has no `force` command.
+
+`up --steps N` and `down --steps N` can partially apply or roll back before
+reporting insufficient history. Review `details.partial_result` when present
+and query status before retrying.
+An empty SQL directory or rollback of a fresh database is an error; repeated
+`up` on an up-to-date database succeeds.

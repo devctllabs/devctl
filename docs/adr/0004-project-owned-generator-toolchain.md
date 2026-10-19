@@ -2,6 +2,7 @@
 
 - Status: accepted
 - Date: 2026-09-03
+- Migration tooling amended by [ADR 0009](0009-explicit-migration-execution.md).
 
 ## Context
 
@@ -15,10 +16,11 @@ explicit override is selected.
 
 The consuming Project owns generator versions and native configuration. Go
 generators are pinned to exact published module versions with `go.mod` tool
-directives. Mise owns exact executable runtime and task versions that are not
-Go tools, including Node 24, quicktype 26.0.0, and golang-migrate 4.19.1 when
-their capabilities are used. Generator objects in the Manifest do not expose a
-competing `tool` selector.
+directives. Mise owns executable runtime and task versions that are not Go
+tools, including Node 24 and quicktype 26.0.0 when their capabilities are used.
+Migration tasks moved from the external golang-migrate executable to
+`devctl migrate` in [ADR 0009](0009-explicit-migration-execution.md). Generator
+objects in the Manifest do not expose a competing `tool` selector.
 
 Devctl invokes tools through the Project environment, writes into temporary
 storage, validates expected output, and hands publication to the owning

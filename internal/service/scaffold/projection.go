@@ -363,68 +363,15 @@ func databaseVariantRequirements(kind string) []string {
 }
 
 func compileMiseTemplate(manifest projectdomain.Manifest, kafkaJSON bool) miseTemplateData {
-	prefix := manifest.Env.Prefix
-	if prefix == "" {
-		prefix = strings.ToUpper(strings.ReplaceAll(manifest.Project.Name, "-", "_")) + "_"
-	}
-	migrations, tags := compileMigrationTasks(manifest.Components.DB, prefix)
-	return miseTemplateData{JSON: kafkaJSON, Migrations: migrations, MigrationTags: tags}
+	return miseTemplateData{JSON: kafkaJSON, Migrations: compileMigrationTasks(manifest)}
 }
 
-func compileMigrationTasks(database *projectdomain.DB, prefix string) ([]migrationTask, []string) {
-	if database == nil {
-		return nil, nil
-	}
+func compileMigrationTasks(manifest projectdomain.Manifest) []migrationTask {
 	var migrations []migrationTask
-	migrationKinds := make(map[string]struct{})
-	for _, connection := range database.Connections {
-		connectionTasks := compileConnectionMigrationTasks(connection, prefix)
-		migrations = append(migrations, connectionTasks...)
-		for _, task := range connectionTasks {
-			migrationKinds[task.Kind] = struct{}{}
-		}
+	for _, target := range projectdomain.MigrationTargets(manifest) {
+		migrations = append(migrations, migrationTask{TaskPrefix: "migrate:" + target.ID(), Target: target.ID(), Path: target.Path})
 	}
-	sort.Slice(migrations, func(i, j int) bool { return migrations[i].TaskPrefix < migrations[j].TaskPrefix })
-	tags := sortedKeys(migrationKinds)
-	return migrations, tags
-}
-
-func compileConnectionMigrationTasks(connection projectdomain.DBConnection, prefix string) []migrationTask {
-	var tasks []migrationTask
-	for _, variant := range connection.Variants {
-		if task, exists := compileMigrationTask(connection.Name, variant, prefix); exists {
-			tasks = append(tasks, task)
-		}
-	}
-	return tasks
-}
-
-func compileMigrationTask(
-	connectionName string,
-	variant projectdomain.DBVariant,
-	prefix string,
-) (migrationTask, bool) {
-	if variant.Migrations == nil {
-		return migrationTask{}, false
-	}
-	environment := prefix + variant.Migrations.DatabaseEnv
-	expression := "${" + environment + ":?set " + environment + "}"
-	if variant.Migrations.DatabaseDefault != "" {
-		expression = "${" + environment + ":-" + variant.Migrations.DatabaseDefault + "}"
-	}
-	return migrationTask{
-		TaskPrefix: "migrate:" + connectionName + ":" + variant.Name,
-		Path:       variant.Migrations.Path, DatabaseExpression: expression, Kind: variant.Kind,
-	}, true
-}
-
-func sortedKeys[Value any](values map[string]Value) []string {
-	keys := make([]string, 0, len(values))
-	for key := range values {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	return keys
+	return migrations
 }
 
 func manifestHasKafkaFormat(manifest projectdomain.Manifest, format string) bool {

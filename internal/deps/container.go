@@ -6,6 +6,7 @@ import (
 
 	generateservice "github.com/devctllabs/devctl/internal/service/generate"
 	lintservice "github.com/devctllabs/devctl/internal/service/lint"
+	migrationservice "github.com/devctllabs/devctl/internal/service/migration"
 	"github.com/devctllabs/devctl/internal/service/project"
 	"github.com/devctllabs/devctl/internal/service/scaffold"
 	syncservice "github.com/devctllabs/devctl/internal/service/sync"
@@ -30,6 +31,7 @@ func New(logger *zap.Logger) (*Container, error) {
 		container.provideClients,
 		container.provideServices,
 		container.provideScaffoldServices,
+		container.provideMigration,
 	}
 	for _, provide := range providers {
 		if err := provide(); err != nil {
@@ -37,6 +39,15 @@ func New(logger *zap.Logger) (*Container, error) {
 		}
 	}
 	return container, nil
+}
+
+// MigrationService resolves the selected-target migration capability on demand.
+func (c *Container) MigrationService() (*migrationservice.Service, error) {
+	service, err := resolve[*migrationservice.Service](c.di)
+	if err != nil {
+		return nil, fmt.Errorf("di.Resolve: %w", err)
+	}
+	return service, nil
 }
 
 // ProjectService resolves the project query and mutation root on demand.

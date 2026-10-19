@@ -26,7 +26,9 @@ when generated code is required.
 A **Source** is a bounded origin for Contracts. A Contract Reference selects an
 Entrypoint or named Export from that Source. External Contracts become
 committed **Contract Snapshots** after `sync`, so later lint and generation can
-run offline and produce reviewable changes.
+consume them without reacquiring the supplier. External tools may still require
+network access or prepared dependency caches; see
+[Contracts and generation](../product/contracts-and-generation.md).
 
 A **Target** is the effective unit addressed by `sync`, `lint`, or `gen`, for
 example `http-client:billing`. `inspect` shows the complete, deterministically

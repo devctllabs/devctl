@@ -20,8 +20,9 @@ field paths are typed domain errors reported by `validate` as
 `runtime_config_conflict`.
 
 Every Go Project has an implicit `config` Target. Its default Managed Output is
-`gen/config/config.gen.go`; `languages.go.generators.config.out` only overrides
-that location. Newly initialized Manifests omit the redundant default block.
+`gen/config/config.gen.go`; `languages.go.generators.config.out` selects the
+output directory, defaulting to `gen/config`, while the filename remains
+`config.gen.go`. Newly initialized Manifests omit the redundant default block.
 `devctl gen config` and `devctl init scaffold` use the same renderer for one
 grouped generated `Config` type and the root `.env.example`. Scaffold emits an
 adapter that imports the generated type rather than maintaining a second
@@ -43,9 +44,12 @@ overridden through environment. `CommitRetry` inherits the main retry policy;
 through user-owned custom environment and explicit composition until they
 become Manifest features.
 
-Migration database environment belongs only to example and inspect
-projections. It is absent from application Runtime Config, and the migration
-URL is distinct from the runtime database connection. Secret fields never
+Migration database environment is absent from application Runtime Config, and
+the migration URL is distinct from the runtime database connection. The
+migration projection supplies its effective environment key to example and
+inspect output and to the explicit migration workflow added in
+[ADR 0009](0009-explicit-migration-execution.md). That workflow resolves its own
+URL separately from application Runtime Config. Runtime secret fields never
 carry defaults: generated tags omit them, `.env.example` leaves them blank,
 and inspect reports only the secret marker.
 

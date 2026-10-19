@@ -5,9 +5,6 @@ golangci-lint = "2.12.2"
 node = "24"
 "npm:quicktype" = "26.0.0"
 {{- end }}
-{{- if .Migrations }}
-"go:github.com/golang-migrate/migrate/v4/cmd/migrate" = { version = "v4.19.1", tags = [{{- range $index, $tag := .MigrationTags }}{{ if $index }}, {{ end }}{{ printf "%q" $tag }}{{- end }}] }
-{{- end }}
 
 [tasks.fmt]
 run = "golangci-lint fmt"
@@ -36,22 +33,40 @@ depends = ["fmt:check", "lint", "test"]
 description = "Create timestamped migration files in {{ .Path }}"
 usage = 'arg "<name>" help="Migration name"'
 run = '''
-migrate create -ext sql -dir "{{ .Path }}" -format "20060102150405" "${usage_name?}"
+devctl migrate create --target "{{ .Target }}" "${usage_name?}"
 '''
 
 [tasks."{{ .TaskPrefix }}:up"]
 description = "Apply migrations from {{ .Path }}"
+usage = '''
+flag "--steps <N>" help="Apply N migrations; omit to apply all"
+flag "--env-file <path>" help="Read migration URL from dotenv file"
+'''
 run = '''
-database_url="{{ .DatabaseExpression }}"
-migrate -path "{{ .Path }}" -database "$database_url" up
+set --
+if [ -n "${usage_steps:-}" ]; then set -- --steps "$usage_steps"; fi
+if [ -n "${usage_env_file:-}" ]; then set -- "$@" --env-file "$usage_env_file"; fi
+devctl migrate up --target "{{ .Target }}" "$@"
 '''
 
 [tasks."{{ .TaskPrefix }}:down"]
 description = "Roll back migrations from {{ .Path }}"
-usage = 'arg "[steps]" default="1" help="Number of migrations"'
-confirm = "Roll back {{ .TaskPrefix }} migrations?"
+usage = '''
+arg "[steps]" default="1" help="Number of migrations"
+flag "--env-file <path>" help="Read migration URL from dotenv file"
+'''
 run = '''
-database_url="{{ .DatabaseExpression }}"
-migrate -path "{{ .Path }}" -database "$database_url" down "${usage_steps?}"
+set --
+if [ -n "${usage_env_file:-}" ]; then set -- --env-file "$usage_env_file"; fi
+devctl migrate down --target "{{ .Target }}" --steps "${usage_steps?}" "$@"
+'''
+
+[tasks."{{ .TaskPrefix }}:status"]
+description = "Show migration version and dirty state for {{ .Target }}"
+usage = 'flag "--env-file <path>" help="Read migration URL from dotenv file"'
+run = '''
+set --
+if [ -n "${usage_env_file:-}" ]; then set -- --env-file "$usage_env_file"; fi
+devctl migrate status --target "{{ .Target }}" "$@"
 '''
 {{ end }}

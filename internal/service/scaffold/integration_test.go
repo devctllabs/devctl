@@ -115,6 +115,153 @@ languages:
 	require.NoError(t, err)
 }
 
+func TestScaffoldPreservesCustomHTTPConfigs(t *testing.T) {
+	t.Parallel()
+
+	for _, existing := range []bool{false, true} {
+		t.Run(fmt.Sprintf("existing=%t", existing), func(t *testing.T) {
+			t.Parallel()
+
+			root := t.TempDir()
+			manifestPath := filepath.Join(root, "devctl.yaml")
+			require.NoError(t, os.WriteFile(manifestPath, []byte(`version: 1
+project: {name: sample, language: go}
+env: {}
+paths: {external_contracts: api/external}
+sources:
+  contracts: {type: local, path: api/contracts}
+exports: {}
+components:
+  http:
+    server: {openapi: contracts/service.yaml}
+    clients:
+      - {name: orders, source: contracts, path: orders.yaml, oapi_config: tools/oapi/orders.yaml}
+      - {name: catalog, source: contracts, path: catalog.yaml}
+languages:
+  go:
+    module: example.test/sample
+    generators:
+      http: {oapi_config: tools/oapi/custom-server.yaml}
+`), 0o644))
+			customPaths := []string{"tools/oapi/custom-server.yaml", "tools/oapi/orders.yaml"}
+			const customContent = "# user-owned\npackage: custom\n"
+			if existing {
+				require.NoError(t, os.MkdirAll(filepath.Join(root, "tools/oapi"), 0o755))
+				for _, path := range customPaths {
+					require.NoError(t, os.WriteFile(filepath.Join(root, path), []byte(customContent), 0o644))
+				}
+			}
+
+			result, err := scaffoldProject(context.Background(), manifestPath)
+			require.NoError(t, err)
+			require.FileExists(t, filepath.Join(root, "contracts/service.yaml"))
+			require.FileExists(t, filepath.Join(root, "tools/oapi/clients.catalog.yaml"))
+			for _, path := range customPaths {
+				if existing {
+					content, err := os.ReadFile(filepath.Join(root, path))
+					require.NoError(t, err)
+					require.Equal(t, customContent, string(content))
+				} else {
+					require.NoFileExists(t, filepath.Join(root, path))
+				}
+			}
+			for _, change := range result.Files {
+				require.NotContains(t, customPaths, change.Path)
+			}
+		})
+	}
+}
+
+func TestScaffoldManagesCanonicalAndSharedHTTPConfigs(t *testing.T) {
+	t.Parallel()
+
+	for _, explicit := range []bool{false, true} {
+		t.Run(fmt.Sprintf("explicit canonical=%t", explicit), func(t *testing.T) {
+			t.Parallel()
+
+			root := t.TempDir()
+			manifest := projectdomain.Manifest{
+				Project:   projectdomain.Identity{Name: "sample", Language: "go"},
+				Sources:   map[string]projectdomain.Source{"contracts": {Type: projectdomain.SourceLocal, Path: "api/contracts"}},
+				Languages: projectdomain.Languages{Go: projectdomain.GoLanguage{Module: "example.test/sample"}},
+				Components: projectdomain.Components{HTTP: &projectdomain.HTTP{
+					Server: &projectdomain.HTTPServer{},
+					Clients: []projectdomain.HTTPClient{
+						{Name: "orders", Source: "contracts", Path: "orders.yaml", OAPIConfig: "tools/oapi/shared.yaml"},
+						{Name: "catalog", Source: "contracts", Path: "catalog.yaml", OAPIConfig: "tools/oapi/shared.yaml"},
+						{Name: "billing", Source: "contracts", Path: "billing.yaml"},
+					},
+				}},
+			}
+			if explicit {
+				manifest.Languages.Go.Generators.HTTP = &projectdomain.HTTPGenerator{OAPIConfig: "tools/oapi/server.yaml"}
+				manifest.Components.HTTP.Clients[2].OAPIConfig = "tools/oapi/clients.billing.yaml"
+			}
+			service := scaffold.New(zap.NewNop(), fixedProjectRepository{project: projectdomain.Project{Root: root, Manifest: manifest}}, workspacerepo.NewFilesystemRepo())
+			require.NoError(t, os.MkdirAll(filepath.Join(root, "tools/oapi"), 0o755))
+			const existing = "# user content\npackage: custom\n"
+			for _, path := range []string{"tools/oapi/shared.yaml", "tools/oapi/server.yaml", "tools/oapi/clients.billing.yaml"} {
+				require.NoError(t, os.WriteFile(filepath.Join(root, path), []byte(existing), 0o644))
+			}
+
+			for attempt := range 2 {
+				result, err := service.Scaffold(context.Background(), scaffolddomain.Command{})
+				require.NoError(t, err)
+				shared, err := os.ReadFile(filepath.Join(root, "tools/oapi/shared.yaml"))
+				require.NoError(t, err)
+				require.Equal(t, existing, string(shared))
+				for _, path := range []string{"tools/oapi/server.yaml", "tools/oapi/clients.billing.yaml"} {
+					content, err := os.ReadFile(filepath.Join(root, path))
+					require.NoError(t, err)
+					require.NotEqual(t, existing, string(content))
+					action := scaffolddomain.FileUpdated
+					if attempt > 0 {
+						action = scaffolddomain.FileUnchanged
+					}
+					requireFileChange(t, result, path, action)
+				}
+			}
+		})
+	}
+}
+
+func TestScaffoldRejectsCustomHTTPConfigArtifactCollisions(t *testing.T) {
+	t.Parallel()
+
+	for _, configPath := range []string{"go.mod", "api/openapi/swagger.yaml", "tools/oapi/clients.catalog.yaml"} {
+		t.Run(configPath, func(t *testing.T) {
+			t.Parallel()
+
+			root := t.TempDir()
+			manifest := projectdomain.Manifest{
+				Project: projectdomain.Identity{Name: "sample", Language: "go"},
+				Sources: map[string]projectdomain.Source{"contracts": {Type: projectdomain.SourceLocal, Path: "api/contracts"}},
+				Languages: projectdomain.Languages{Go: projectdomain.GoLanguage{
+					Module: "example.test/sample", Generators: projectdomain.GoGenerators{HTTP: &projectdomain.HTTPGenerator{OAPIConfig: configPath}},
+				}},
+				Components: projectdomain.Components{HTTP: &projectdomain.HTTP{
+					Server:  &projectdomain.HTTPServer{},
+					Clients: []projectdomain.HTTPClient{{Name: "catalog", Source: "contracts", Path: "catalog.yaml"}},
+				}},
+			}
+			service := scaffold.New(zap.NewNop(), fixedProjectRepository{project: projectdomain.Project{Root: root, Manifest: manifest}}, workspacerepo.NewFilesystemRepo())
+			fullPath := filepath.Join(root, configPath)
+			require.NoError(t, os.MkdirAll(filepath.Dir(fullPath), 0o755))
+			const existing = "# preserve on conflict\n"
+			require.NoError(t, os.WriteFile(fullPath, []byte(existing), 0o644))
+
+			result, err := service.Scaffold(context.Background(), scaffolddomain.Command{})
+
+			require.Error(t, err)
+			require.Empty(t, result.Files)
+			content, err := os.ReadFile(fullPath)
+			require.NoError(t, err)
+			require.Equal(t, existing, string(content))
+			require.NoDirExists(t, filepath.Join(root, "cmd"))
+		})
+	}
+}
+
 func requireFileChange(t *testing.T, result scaffolddomain.Result, path string, action scaffolddomain.FileAction) {
 	t.Helper()
 	for _, change := range result.Files {

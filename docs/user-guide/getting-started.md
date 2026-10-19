@@ -246,7 +246,7 @@ Wait until it is ready:
 docker exec devctl-orders-postgres pg_isready -U orders -d orders
 ```
 
-Configure both the runtime pool and the migration tool, then migrate:
+Configure both the runtime pool and the separate migration URL, then migrate:
 
 ```sh
 export ORDERS_API_DB_PRIMARY_KIND=postgres
