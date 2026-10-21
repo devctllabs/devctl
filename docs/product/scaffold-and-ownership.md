@@ -23,6 +23,32 @@ workflow. Handwritten files inside those trees can be removed by replacement.
 The distinction and partial-publication policy are recorded in
 [PDR 0003](decisions/0003-managed-outputs-and-scaffold-seeds.md).
 
+## Go quality checks
+
+Scaffold provides a pinned golangci-lint toolchain, `gofmt` formatting, and Go
+lint tasks. The lint configuration checks handwritten production and test code
+with cyclomatic complexity limited to 10, cognitive complexity limited to 15,
+at most four function parameters, and at most three results. Existing checks
+for errors, resources, context usage, and test practices remain enabled.
+
+The Project's Mise tasks expose Go linting as `lint:go` and Contract linting
+as `lint:contracts`; `lint` runs both. The `devctl lint` command checks
+Contracts. The `fmt` task formats Go code, and `fmt:check` checks formatting.
+
+In importable production packages, exported types, functions, and methods
+require Go doc, including exported methods on private receivers and public
+interface methods. The production Go doc check skips `package main`.
+Production constants and variables do not require documentation, and name
+stuttering is not checked. In test files, package-level declarations and methods
+require Go doc, including private helpers. Standard `Test`, `TestMain`,
+`Benchmark`, `Fuzz`, and `Example` entrypoints do not. Interface method inputs
+must be named, including methods with a single input.
+
+Generated Go files with the standard generated-file marker and the `gen/` tree
+are excluded. Refresh replaces the lint configuration but preserves existing
+Scaffold Seeds, so existing application code may need documentation when the
+quality checks are strengthened.
+
 ## Native generator configs
 
 Canonical HTTP config paths are `tools/oapi/server.yaml` and

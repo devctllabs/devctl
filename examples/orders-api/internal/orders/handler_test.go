@@ -9,16 +9,19 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// stubStore returns fixed orders and errors for handler scenarios.
 type stubStore struct {
 	created Order
 	got     Order
 	err     error
 }
 
+// Create returns the configured creation result.
 func (s *stubStore) Create(context.Context, string, int64) (Order, error) {
 	return s.created, s.err
 }
 
+// Get returns the configured lookup result.
 func (s *stubStore) Get(context.Context, int64) (Order, error) {
 	return s.got, s.err
 }

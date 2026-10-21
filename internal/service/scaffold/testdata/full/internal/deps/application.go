@@ -12,7 +12,10 @@ import (
 // application is the user-owned composition root. Add application dependencies here.
 type application struct{}
 
-func (*application) RegisterHTTP(*echo.Echo)   {}
+// RegisterHTTP registers application HTTP handlers on the server.
+func (*application) RegisterHTTP(*echo.Echo) {}
+
+// RegisterGRPC registers application gRPC services on the server.
 func (*application) RegisterGRPC(*grpc.Server) {}
 
 // provideApplication is created once. Add newly scaffolded provider calls manually.
