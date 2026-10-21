@@ -19,9 +19,11 @@ import (
 type application struct{}
 
 {{- if .HTTP }}
+// RegisterHTTP registers application HTTP handlers on the server.
 func (*application) RegisterHTTP(*echo.Echo) {}
 {{- end }}
 {{- if .GRPC }}
+// RegisterGRPC registers application gRPC services on the server.
 func (*application) RegisterGRPC(*grpc.Server) {}
 {{- end }}
 

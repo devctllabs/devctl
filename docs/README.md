@@ -11,7 +11,7 @@ the documentation at its matching Git tag.
 - [Contracts and generation](product/contracts-and-generation.md): Sources,
   Snapshots, synchronization, linting, and generated outputs.
 - [Scaffold and ownership](product/scaffold-and-ownership.md): refresh rules,
-  user-owned inputs, and partial publication.
+  Go quality checks, user-owned inputs, and partial publication.
 - [Runtime configuration](product/runtime-configuration.md): environment keys,
   defaults, secrets, and Start Policy.
 - [Generated application](product/generated-application.md): composition,

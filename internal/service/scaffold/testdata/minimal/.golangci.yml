@@ -11,6 +11,7 @@ linters:
     - bodyclose
     - containedctx
     - contextcheck
+    - cyclop
     - durationcheck
     - errcheck
     - errchkjson
@@ -22,6 +23,7 @@ linters:
     - gocheckcompilerdirectives
     - gochecknoinits
     - gocognit
+    - godoclint
     - govet
     - inamedparam
     - ineffassign
@@ -50,8 +52,18 @@ linters:
     - wastedassign
     - wrapcheck
   settings:
+    cyclop:
+      max-complexity: 10
     gocognit:
-      min-complexity: 20
+      min-complexity: 15
+    godoclint:
+      default: none
+      enable: [require-doc]
+      options:
+        require-doc:
+          ignore-unexported: false
+    inamedparam:
+      skip-single-param: false
     nolintlint:
       allow-unused: false
       require-explanation: true
@@ -66,9 +78,26 @@ linters:
           arguments: [4]
         - name: function-result-limit
           arguments: [3]
+        - name: exported
+          arguments:
+            - check-private-receivers
+            - check-public-interface
+            - disable-stuttering-check
+            - disable-checks-on-constants
+            - disable-checks-on-variables
   exclusions:
     generated: strict
     paths: ["^gen/"]
+    rules:
+      # Revive owns production documentation; godoclint also checks test helpers.
+      - path-except: _test\.go$
+        linters: [godoclint]
+      # Test entry points describe their scenarios through names and assertions.
+      # Keep documentation checks for helpers and methods in the same files.
+      - path: _test\.go$
+        linters: [godoclint]
+        text: '^symbol should have a godoc'
+        source: '^func ((Test|Benchmark|Fuzz)([A-Z0-9_][A-Za-z0-9_]*)?\([^)]* \*testing\.(T|B|F|M)|Example([A-Z0-9_][A-Za-z0-9_]*)?\()\)[[:space:]]+\{'
 formatters:
   enable: [gofmt]
   exclusions:

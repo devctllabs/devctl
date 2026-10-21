@@ -10,8 +10,10 @@ import (
 
 var ErrNotImplemented = errors.New("Kafka consumer handler is not implemented")
 
+// Handler processes batches for this Kafka consumer.
 type Handler struct{}
 
+// NewHandler creates a handler whose batch processing must be implemented by the application.
 func NewHandler() *Handler { return &Handler{} }
 
 // Handle processes the batch synchronously. It must not retain batch data after returning.

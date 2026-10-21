@@ -11,7 +11,7 @@ their observable behavior, and operational constraints.
 - [Contracts and generation](contracts-and-generation.md): bounded Sources,
   committed Snapshots, linting, generators, and publication.
 - [Scaffold and ownership](scaffold-and-ownership.md): Managed Outputs, Seeds,
-  custom configurations, and refresh behavior.
+  Go quality checks, custom configurations, and refresh behavior.
 - [Runtime configuration](runtime-configuration.md): environment policy,
   generated config, Start Policy, and migration separation.
 - [Generated application](generated-application.md): explicit composition,

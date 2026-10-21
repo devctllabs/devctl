@@ -13,6 +13,7 @@ import (
 
 var ErrNotFound = errors.New("order not found")
 
+// Order is a persisted customer order with its total expressed in cents.
 type Order struct {
 	ID           int64
 	CustomerName string
@@ -20,20 +21,26 @@ type Order struct {
 	CreatedAt    time.Time
 }
 
+// Store persists and retrieves orders.
 type Store interface {
+	// Create persists an order and returns its assigned ID and creation time.
 	Create(ctx context.Context, customerName string, totalCents int64) (Order, error)
+	// Get returns the order with the given ID, or ErrNotFound when it does not exist.
 	Get(ctx context.Context, id int64) (Order, error)
 }
 
+// PostgresStore reads and writes orders through PostgreSQL endpoints.
 type PostgresStore struct {
 	reader *postgresdb.Endpoint
 	writer *postgresdb.Endpoint
 }
 
+// NewPostgresStore creates a store using separate reader and writer endpoints.
 func NewPostgresStore(reader, writer *postgresdb.Endpoint) *PostgresStore {
 	return &PostgresStore{reader: reader, writer: writer}
 }
 
+// Create inserts an order and returns its assigned ID and creation time.
 func (s *PostgresStore) Create(ctx context.Context, customerName string, totalCents int64) (Order, error) {
 	const query = `
 		INSERT INTO orders (customer_name, total_cents)
@@ -53,6 +60,7 @@ func (s *PostgresStore) Create(ctx context.Context, customerName string, totalCe
 	return order, nil
 }
 
+// Get retrieves an order by ID, returning ErrNotFound when it does not exist.
 func (s *PostgresStore) Get(ctx context.Context, id int64) (Order, error) {
 	const query = `
 		SELECT id, customer_name, total_cents, created_at
@@ -75,14 +83,17 @@ func (s *PostgresStore) Get(ctx context.Context, id int64) (Order, error) {
 	return order, nil
 }
 
+// Handler serves the Orders API using a Store.
 type Handler struct {
 	store Store
 }
 
+// NewHandler creates an Orders API handler backed by store.
 func NewHandler(store Store) *Handler {
 	return &Handler{store: store}
 }
 
+// CreateOrder validates the request body and persists a new order.
 func (h *Handler) CreateOrder(ctx context.Context, request serverhttp.CreateOrderRequestObject) (serverhttp.CreateOrderResponseObject, error) {
 	if request.Body == nil {
 		return nil, errors.New("create order body is required")
@@ -94,6 +105,7 @@ func (h *Handler) CreateOrder(ctx context.Context, request serverhttp.CreateOrde
 	return serverhttp.CreateOrder201JSONResponse(toAPIOrder(order)), nil
 }
 
+// GetOrder retrieves an order, returning a not-found response when it does not exist.
 func (h *Handler) GetOrder(ctx context.Context, request serverhttp.GetOrderRequestObject) (serverhttp.GetOrderResponseObject, error) {
 	order, err := h.store.Get(ctx, request.Id)
 	if errors.Is(err, ErrNotFound) {

@@ -16,6 +16,7 @@ type application struct {
 	orders *orders.Handler
 }
 
+// RegisterHTTP registers the Orders API handlers on the server.
 func (a *application) RegisterHTTP(server *echo.Echo) {
 	serverhttp.RegisterHandlers(server, serverhttp.NewStrictHandler(a.orders, nil))
 }
